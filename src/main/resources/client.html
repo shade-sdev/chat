@@ -1290,6 +1290,28 @@
             }
         }
 
+        function handleRemoteStreamAdded(userId, stream) {
+            console.log(`Remote stream added for user ${userId}:`, stream);
+            console.log('Stream tracks:', stream.getTracks());
+
+            // Check if stream has audio tracks
+            const audioTracks = stream.getAudioTracks();
+            if (audioTracks.length === 0) {
+                console.warn('No audio tracks in remote stream');
+                return;
+            }
+
+            console.log('Audio tracks found:', audioTracks);
+
+            // Create or update audio element
+            const audioElement = createAudioElement(userId, stream);
+
+            // Try to play
+            audioElement.play().catch(error => {
+                console.error('Failed to play audio:', error);
+            });
+        }
+
         // WebSocket Functions
         function connectWebSocket() {
             const wsUrl = `${WS_BASE}/ws?token=${state.token}`;
@@ -2369,81 +2391,59 @@
             console.log('Answer peer connection created, waiting for offer...');
         }
 
-        function createPeerConnection(otherUserId, callId) {
-            console.log('Creating peer connection for:', otherUserId);
-
-            const pc = new RTCPeerConnection({
+        function createPeerConnection(userId) {
+            console.log('Creating RTCPeerConnection with config:', {
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' }
-                ],
-                iceTransportPolicy: 'all'
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ]
             });
 
-            // Log when transceivers are created
-            pc.ontrack = (event) => {
-                console.log('ONTrack event fired!');
-                console.log('Event:', event);
-                console.log('Streams:', event.streams.length);
-                console.log('Track:', event.track);
+            const peerConnection = new RTCPeerConnection({
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ]
+            });
+
+            // Log ICE candidate events
+            peerConnection.onicecandidate = (event) => {
+                console.log('ICE candidate generated:', event.candidate);
+                if (event.candidate) {
+                    // Send candidate
+                    const signal = {
+                        candidate: event.candidate.candidate,
+                        sdpMid: event.candidate.sdpMid,
+                        sdpMLineIndex: event.candidate.sdpMLineIndex
+                    };
+                    // Send through WebSocket
+                }
+            };
+
+            // Log connection state changes
+            peerConnection.onconnectionstatechange = () => {
+                console.log(`Connection state changed to: ${peerConnection.connectionState}`);
+            };
+
+            // Log ICE connection state
+            peerConnection.oniceconnectionstatechange = () => {
+                console.log(`ICE connection state: ${peerConnection.iceConnectionState}`);
+                if (peerConnection.iceConnectionState === 'connected') {
+                    console.log('ICE connection established!');
+                }
+            };
+
+            // Handle remote stream
+            peerConnection.ontrack = (event) => {
+                console.log('Remote track received:', event.track.kind);
+                console.log('Streams:', event.streams);
 
                 if (event.streams && event.streams[0]) {
-                    console.log('Creating audio element for remote stream');
-                    const audio = document.createElement('audio');
-                    audio.id = `remote-audio-${otherUserId}`;
-                    audio.autoplay = true;
-                    audio.playsInline = true;
-                    audio.controls = false;
-                    audio.style.display = 'none';
-                    audio.srcObject = event.streams[0];
-
-                    document.body.appendChild(audio);
-
-                    audio.play().catch(e => {
-                        console.error('Autoplay failed:', e);
-                        showToast('Audio', 'Click to enable audio');
-                    });
+                    handleRemoteStreamAdded(userId, event.streams[0]);
                 }
             };
 
-            // Monitor transceiver creation
-            const originalAddTransceiver = pc.addTransceiver.bind(pc);
-            pc.addTransceiver = function(...args) {
-                console.log('addTransceiver called with:', args);
-                return originalAddTransceiver(...args);
-            };
-
-            // Monitor track addition
-            const originalAddTrack = pc.addTrack.bind(pc);
-            pc.addTrack = function(track, ...streams) {
-                console.log('addTrack called:');
-                console.log('Track:', track.kind, track.id, track.enabled);
-                console.log('Streams:', streams);
-                return originalAddTrack(track, ...streams);
-            };
-
-            pc.onicecandidate = (event) => {
-                if (event.candidate) {
-                    console.log('ICE candidate:', event.candidate.candidate);
-                    sendWebSocketMessage('ice_candidate', {
-                        callId,
-                        fromUserId: state.user.id,
-                        toUserId: otherUserId,
-                        signal: JSON.stringify(event.candidate)
-                    });
-                }
-            };
-
-            pc.oniceconnectionstatechange = () => {
-                console.log('ICE state:', pc.iceConnectionState);
-            };
-
-            pc.onsignalingstatechange = () => {
-                console.log('Signaling state:', pc.signalingState);
-            };
-
-            return pc;
+            return peerConnection;
         }
 
         function parseHeavilyEscapedJSON(str) {
@@ -2482,103 +2482,244 @@
         }
 
 
-        async function handleWebRTCSignal(parsedMessage) {
-            console.log('Processing WebRTC signal:', parsedMessage.type);
-
+        function handleWebRTCSignal(type, dataString) {
             try {
-                // The data field is a JSON string
-                const dataStr = parsedMessage.data;
-                console.log('Data string:', typeof dataStr, dataStr.substring(0, 200) + '...');
+                console.log(`Processing WebRTC signal: ${type}`);
 
-                // Parse the data
                 let data;
-                if (typeof dataStr === 'string') {
-                    // Clean the string
-                    let cleanStr = dataStr;
-
-                    // Remove extra escaping
-                    cleanStr = cleanStr.replace(/\\"/g, '"');
-
-                    // Remove surrounding quotes if present
-                    if (cleanStr.startsWith('"') && cleanStr.endsWith('"')) {
-                        cleanStr = cleanStr.slice(1, -1);
-                    }
-
-                    // Parse
-                    data = JSON.parse(cleanStr);
+                if (typeof dataString === 'string') {
+                    data = JSON.parse(dataString);
                 } else {
-                    data = dataStr;
+                    data = dataString;
                 }
 
                 console.log('Parsed data:', data);
 
-                // Check if signal is for us
-                if (data.toUserId !== state.user.id) {
-                    console.log(`Signal not for us. To: ${data.toUserId}, We: ${state.user.id}`);
+                const { callId, fromUserId, toUserId, signal } = data;
+
+                // Check if this signal is for current user
+                if (toUserId !== state.currentUser?.id) {
+                    console.log(`Signal is not for current user. To: ${toUserId}, Current: ${state.currentUser?.id}`);
                     return;
                 }
 
-                console.log('Signal is for us, processing...');
+                // Handle different call types
+                const call = state.activeCalls[callId];
+                if (!call) {
+                    console.log(`No active call found for ID: ${callId}`);
+                    return;
+                }
 
-                const fromUserId = data.fromUserId;
-                const callId = data.callId;
+                // CRITICAL FIX: Parse the triple-encoded JSON
+                let signalData = signal;
+
+                // First level: signal might be a string containing JSON
+                if (typeof signal === 'string') {
+                    try {
+                        // First parse - removes the outer quotes
+                        signalData = JSON.parse(signal);
+
+                        // Second parse - if result is still a string, it contains JSON
+                        if (typeof signalData === 'string') {
+                            try {
+                                signalData = JSON.parse(signalData);
+                            } catch (e2) {
+                                console.log('Second parse failed, using string as-is:', e2.message);
+                            }
+                        }
+                    } catch (e1) {
+                        console.log('First parse failed, using raw signal:', e1.message);
+                    }
+                }
+
+                console.log(`Processing ${type} for call ${callId} from ${fromUserId}`);
+                console.log('Signal data type:', typeof signalData);
+                console.log('Signal data:', signalData);
 
                 // Get or create peer connection
-                let pc = state.peerConnections[fromUserId];
-
-                if (!pc && parsedMessage.type === 'webrtc_offer') {
-                    console.log('Creating peer connection for:', fromUserId);
-                    pc = createPeerConnection(fromUserId, callId);
-                    state.peerConnections[fromUserId] = pc;
-                }
-
-                if (!pc) {
-                    console.error('No peer connection');
+                const peerConnection = ensurePeerConnection(fromUserId, callId);
+                if (!peerConnection) {
+                    console.error('Failed to get peer connection for user:', fromUserId);
                     return;
                 }
 
-                // Parse the inner signal (SDP or ICE)
-                const signal = JSON.parse(data.signal);
-                console.log('Signal type:', signal.type || 'ICE candidate');
+                // Process based on signal type
+                switch (type) {
+                    case 'webrtc_offer':
+                        handleOffer(peerConnection, signalData, callId, fromUserId);
+                        break;
 
-                if (parsedMessage.type === 'webrtc_offer') {
-                    // Handle offer
-                    await pc.setRemoteDescription(new RTCSessionDescription(signal));
+                    case 'webrtc_answer':
+                        handleAnswer(peerConnection, signalData);
+                        break;
 
-                    // Add local stream
-                    if (state.localStream && pc.getSenders().length === 0) {
-                        state.localStream.getTracks().forEach(track => {
-                            pc.addTrack(track, state.localStream);
-                        });
-                    }
+                    case 'ice_candidate':
+                        handleIceCandidate(peerConnection, signalData);
+                        break;
 
-                    // Create and send answer
-                    const answer = await pc.createAnswer();
-                    await pc.setLocalDescription(answer);
-
-                    sendWebSocketMessage('webrtc_answer', {
-                        callId,
-                        fromUserId: state.user.id,
-                        toUserId: fromUserId,
-                        signal: JSON.stringify(answer)
-                    });
-
-                } else if (parsedMessage.type === 'webrtc_answer') {
-                    // Handle answer
-                    if (pc.signalingState === 'have-local-offer') {
-                        await pc.setRemoteDescription(new RTCSessionDescription(signal));
-                    }
-
-                } else if (parsedMessage.type === 'ice_candidate') {
-                    // Handle ICE candidate
-                    if (signal.candidate) {
-                        await pc.addIceCandidate(new RTCIceCandidate(signal));
-                    }
+                    default:
+                        console.log(`Unknown WebRTC signal type: ${type}`);
                 }
-
             } catch (error) {
                 console.error('Error in handleWebRTCSignal:', error);
+                console.error('Data that caused error:', dataString);
             }
+        }
+
+        function handleOffer(peerConnection, signalData, callId, fromUserId) {
+            let sdpData = signalData;
+
+            // If sdp is a string that looks like JSON, parse it
+            if (typeof signalData === 'object' && typeof signalData.sdp === 'string') {
+                sdpData = signalData;
+            } else if (typeof signalData === 'object' && signalData.sdp) {
+                // Already good
+            } else {
+                console.error('Invalid offer format:', signalData);
+                return;
+            }
+
+            const offer = {
+                type: 'offer',
+                sdp: sdpData.sdp
+            };
+
+            console.log('Setting remote description with offer:', offer);
+
+            peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
+                .then(() => {
+                    console.log('Remote description set successfully');
+
+                    // Create and send answer
+                    return peerConnection.createAnswer();
+                })
+                .then(answer => {
+                    console.log('Created answer:', answer);
+                    return peerConnection.setLocalDescription(answer);
+                })
+                .then(() => {
+                    console.log('Local description set, sending answer...');
+                    // Send answer back through WebSocket
+                    sendWebRTCOfferAnswer('webrtc_answer', callId, fromUserId, peerConnection.localDescription);
+                })
+                .catch(error => {
+                    console.error('Error handling offer:', error);
+                });
+        }
+
+        // Helper function to handle answer
+        function handleAnswer(peerConnection, signalData) {
+            let sdpData = signalData;
+
+            if (typeof signalData === 'object' && typeof signalData.sdp === 'string') {
+                sdpData = signalData;
+            } else {
+                console.error('Invalid answer format:', signalData);
+                return;
+            }
+
+            const answer = {
+                type: 'answer',
+                sdp: sdpData.sdp
+            };
+
+            console.log('Setting remote description with answer:', answer);
+
+            peerConnection.setRemoteDescription(new RTCSessionDescription(answer))
+                .then(() => {
+                    console.log('Answer set as remote description');
+                })
+                .catch(error => {
+                    console.error('Error setting answer:', error);
+                });
+        }
+
+        // Helper function to handle ICE candidate
+        function handleIceCandidate(peerConnection, signalData) {
+            console.log('Processing ICE candidate:', signalData);
+
+            let candidateData = signalData;
+
+            // Handle different possible formats
+            if (typeof signalData === 'object' && signalData.candidate) {
+                candidateData = signalData;
+            } else {
+                console.error('Invalid ICE candidate format:', signalData);
+                return;
+            }
+
+            // Ensure candidate string starts with 'candidate:'
+            let candidateStr = candidateData.candidate;
+            if (!candidateStr.includes('candidate:')) {
+                candidateStr = 'candidate:' + candidateStr;
+            }
+
+            try {
+                const iceCandidate = new RTCIceCandidate({
+                    candidate: candidateStr,
+                    sdpMid: candidateData.sdpMid || '0',
+                    sdpMLineIndex: candidateData.sdpMLineIndex || 0,
+                    usernameFragment: candidateData.usernameFragment || null
+                });
+
+                console.log('Adding ICE candidate:', iceCandidate);
+
+                peerConnection.addIceCandidate(iceCandidate)
+                    .then(() => {
+                        console.log('ICE candidate added successfully');
+                    })
+                    .catch(error => {
+                        console.error('Error adding ICE candidate:', error);
+                    });
+            } catch (error) {
+                console.error('Error creating RTCIceCandidate:', error);
+                console.error('Candidate data:', candidateData);
+            }
+        }
+
+        // Function to send WebRTC signals
+        function sendWebRTCOfferAnswer(type, callId, toUserId, description) {
+            const message = {
+                type: type,
+                data: {
+                    callId: callId,
+                    fromUserId: state.currentUser.id,
+                    toUserId: toUserId,
+                    signal: JSON.stringify({
+                        type: description.type,
+                        sdp: description.sdp
+                    })
+                }
+            };
+
+            console.log(`Sending ${type} to ${toUserId}:`, message);
+
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify(message));
+            } else {
+                console.error('WebSocket is not open');
+            }
+        }
+
+        function createAudioElement(userId, stream) {
+            const audioId = `audio-${userId}`;
+            let audioElement = document.getElementById(audioId);
+
+            if (!audioElement) {
+                audioElement = document.createElement('audio');
+                audioElement.id = audioId;
+                audioElement.autoplay = true;
+                audioElement.controls = false;
+                audioElement.style.display = 'none';
+                document.body.appendChild(audioElement);
+            }
+
+            // Use the modern way to attach stream
+            audioElement.srcObject = stream;
+
+            console.log(`Audio element created for user ${userId}:`, audioElement);
+
+            return audioElement;
         }
 
         function cleanupCall() {
