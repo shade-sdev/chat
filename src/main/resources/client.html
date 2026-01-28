@@ -1224,36 +1224,71 @@
 
                 // Parse the outer JSON
                 const outer = JSON.parse(rawData);
+                console.log('Outer parsed:', outer);
 
-                // Parse the data field
                 let data = outer.data;
-                if (typeof data === 'string') {
-                    try {
-                        // Remove extra escaping
-                        data = data.replace(/\\"/g, '"');
-                        // Remove surrounding quotes
-                        if (data.startsWith('"') && data.endsWith('"')) {
-                            data = data.slice(1, -1);
-                        }
-                        data = JSON.parse(data);
-                    } catch (e) {
-                        console.error('Could not parse data field:', e);
-                        // Leave as string
-                    }
-                }
 
-                // Return combined object
-                return {
-                    type: outer.type,
-                    ...data
-                };
+                // Handle different types of messages differently
+                if (outer.type === 'webrtc_offer' || outer.type === 'webrtc_answer' || outer.type === 'ice_candidate') {
+                    // For WebRTC signals, the data is already a JSON string but might be double-escaped
+                    console.log('Processing WebRTC signal data');
+
+                    // If it's a string, try to parse it
+                    if (typeof data === 'string') {
+                        try {
+                            // First, clean the string
+                            // Remove extra escaping: replace \" with "
+                            data = data.replace(/\\"/g, '"');
+
+                            // Remove surrounding quotes if present
+                            if (data.startsWith('"') && data.endsWith('"')) {
+                                data = data.slice(1, -1);
+                            }
+
+                            // Now parse it
+                            data = JSON.parse(data);
+                            console.log('Successfully parsed WebRTC data:', data);
+                        } catch (e) {
+                            console.error('Failed to parse WebRTC data:', e);
+                            console.log('Raw data string:', data);
+                            // Keep as string for handleWebRTCSignal to handle
+                        }
+                    }
+
+                    // For WebRTC signals, we need to keep the original structure
+                    return {
+                        type: outer.type,
+                        data: outer.data // Keep the original data string for handleWebRTCSignal
+                    };
+
+                } else {
+                    // For other messages, parse normally
+                    if (typeof data === 'string') {
+                        try {
+                            // Clean and parse
+                            data = data.replace(/\\"/g, '"');
+                            if (data.startsWith('"') && data.endsWith('"')) {
+                                data = data.slice(1, -1);
+                            }
+                            data = JSON.parse(data);
+                        } catch (e) {
+                            console.error('Failed to parse data field:', e);
+                            // Leave as string
+                        }
+                    }
+
+                    // Return combined object
+                    return {
+                        type: outer.type,
+                        ...data
+                    };
+                }
 
             } catch (error) {
                 console.error('Parse error:', error);
                 return null;
             }
         }
-
 
         // WebSocket Functions
         function connectWebSocket() {
@@ -1268,10 +1303,45 @@
             };
 
             state.ws.onmessage = (event) => {
-                const message = parseWebSocketMessage(event.data);
-                if (message) {
-                    console.log('Dispatching message:', message.type, message);
-                    handleWebSocketMessage(message);
+                try {
+                    console.log('Raw WebSocket message:', event.data);
+
+                    // Parse the message
+                    const parsed = JSON.parse(event.data);
+                    console.log('Parsed message:', parsed);
+
+                    // For WebRTC signals, handle differently
+                    if (parsed.type === 'webrtc_offer' || parsed.type === 'webrtc_answer' || parsed.type === 'ice_candidate') {
+                        // Pass as-is to handleWebRTCSignal
+                        handleWebRTCSignal(parsed);
+                    } else {
+                        // For other messages, try to parse the data field
+                        let message = { type: parsed.type };
+
+                        if (typeof parsed.data === 'string') {
+                            try {
+                                // Simple parse - just remove extra escaping
+                                let dataStr = parsed.data;
+                                dataStr = dataStr.replace(/\\"/g, '"');
+                                if (dataStr.startsWith('"') && dataStr.endsWith('"')) {
+                                    dataStr = dataStr.slice(1, -1);
+                                }
+                                const data = JSON.parse(dataStr);
+                                Object.assign(message, data);
+                            } catch (e) {
+                                console.error('Failed to parse data:', e);
+                                message.data = parsed.data;
+                            }
+                        } else {
+                            Object.assign(message, parsed.data || {});
+                        }
+
+                        console.log('Final message:', message);
+                        handleWebSocketMessage(message);
+                    }
+
+                } catch (error) {
+                    console.error('WebSocket error:', error);
                 }
             };
 
@@ -1321,7 +1391,6 @@
                     handleUserStatus(message);
                     break;
                 case 'call_initiated':
-                    // This now has {type: 'call_initiated', call: {...}, callerName: '...'}
                     handleIncomingCall(message);
                     break;
                 case 'call_status':
@@ -1330,11 +1399,8 @@
                 case 'webrtc_offer':
                 case 'webrtc_answer':
                 case 'ice_candidate':
-                    // WebRTC signals need special handling
-                    handleWebRTCSignal({
-                        type: message.type,
-                        data: JSON.stringify(message) // Re-stringify for handleWebRTCSignal
-                    });
+                    // WebRTC signals need special handling with the data string
+                    handleWebRTCSignal(message);
                     break;
                 case 'participant_update':
                     handleParticipantUpdate(message);
@@ -1350,10 +1416,8 @@
                     type: type,
                     data: JSON.stringify(data)
                 };
-                console.log('Sending WebSocket message:', message);
+                console.log('Sending message:', message);
                 state.ws.send(JSON.stringify(message));
-            } else {
-                console.error('WebSocket not connected');
             }
         }
 
@@ -2382,146 +2446,138 @@
             return pc;
         }
 
-        async function handleWebRTCSignal(message) {
-            console.log('Processing WebRTC signal type:', message.type);
-            console.log('Full message:', message);
-            debugSignal(message); // Add this line
+        function parseHeavilyEscapedJSON(str) {
+            console.log('Parsing heavily escaped string:', str.substring(0, 200) + '...');
 
-            // The message from backend has a "data" field that contains a JSON string
-            // We need to parse the data field first
-            let signalData;
+            // Remove all backslashes before quotes
+            let cleaned = str.replace(/\\"/g, '"');
+
+            // Remove surrounding quotes if present
+            if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+                cleaned = cleaned.slice(1, -1);
+            }
+
+            // Parse
             try {
-                // First, check if data is already an object or a string
-                if (typeof message.data === 'string') {
-                    signalData = JSON.parse(message.data);
-                } else {
-                    signalData = message.data;
-                }
-                console.log('Parsed signal data:', signalData);
+                return JSON.parse(cleaned);
             } catch (e) {
-                console.error('Failed to parse signal data:', e);
-                console.log('Raw data:', message.data);
-                return;
-            }
+                console.error('Parse failed, trying alternative...');
 
-            // Now check if this signal is for us
-            if (signalData.toUserId !== state.user.id) {
-                console.log(`Signal not for us. To: ${signalData.toUserId}, We are: ${state.user.id}`);
-                return;
-            }
+                // Try direct parse
+                try {
+                    return JSON.parse(str);
+                } catch (e2) {
+                    console.error('Direct parse also failed');
 
-            console.log(`Signal is for us (${state.user.id}), processing...`);
-
-            const fromUserId = signalData.fromUserId;
-            const callId = signalData.callId;
-
-            // Get or create peer connection
-            let pc = state.peerConnections[fromUserId];
-
-            if (!pc && message.type === 'webrtc_offer') {
-                console.log('Creating new peer connection for offer from:', fromUserId);
-                pc = createPeerConnection(fromUserId, callId);
-                state.peerConnections[fromUserId] = pc;
-
-                // Add local stream if we have it
-                if (state.localStream) {
-                    console.log('Adding local stream to new peer connection');
-                    state.localStream.getTracks().forEach(track => {
-                        pc.addTrack(track, state.localStream);
-                    });
+                    // Try removing ALL backslashes
+                    cleaned = str.replace(/\\/g, '');
+                    try {
+                        return JSON.parse(cleaned);
+                    } catch (e3) {
+                        console.error('All attempts failed');
+                        throw e3;
+                    }
                 }
             }
+        }
 
-            if (!pc) {
-                console.error('No peer connection available for:', fromUserId);
-                return;
-            }
+
+        async function handleWebRTCSignal(parsedMessage) {
+            console.log('Processing WebRTC signal:', parsedMessage.type);
 
             try {
-                if (message.type === 'webrtc_offer') {
-                    console.log('Processing WebRTC offer from:', fromUserId);
+                // The data field is a JSON string
+                const dataStr = parsedMessage.data;
+                console.log('Data string:', typeof dataStr, dataStr.substring(0, 200) + '...');
 
-                    // Parse the SDP signal
-                    const sdpSignal = JSON.parse(signalData.signal);
-                    console.log('SDP signal type:', sdpSignal.type);
+                // Parse the data
+                let data;
+                if (typeof dataStr === 'string') {
+                    // Clean the string
+                    let cleanStr = dataStr;
 
-                    // Check if we already have a remote description
-                    if (pc.remoteDescription) {
-                        console.log('Already have remote description, ignoring duplicate offer');
-                        return;
+                    // Remove extra escaping
+                    cleanStr = cleanStr.replace(/\\"/g, '"');
+
+                    // Remove surrounding quotes if present
+                    if (cleanStr.startsWith('"') && cleanStr.endsWith('"')) {
+                        cleanStr = cleanStr.slice(1, -1);
                     }
 
-                    console.log('Setting remote description...');
-                    await pc.setRemoteDescription(new RTCSessionDescription(sdpSignal));
-                    console.log('Remote description set');
+                    // Parse
+                    data = JSON.parse(cleanStr);
+                } else {
+                    data = dataStr;
+                }
 
-                    // Create answer
-                    console.log('Creating answer...');
-                    const answer = await pc.createAnswer({
-                        offerToReceiveAudio: true,
-                        offerToReceiveVideo: false
-                    });
+                console.log('Parsed data:', data);
 
-                    console.log('Setting local description...');
+                // Check if signal is for us
+                if (data.toUserId !== state.user.id) {
+                    console.log(`Signal not for us. To: ${data.toUserId}, We: ${state.user.id}`);
+                    return;
+                }
+
+                console.log('Signal is for us, processing...');
+
+                const fromUserId = data.fromUserId;
+                const callId = data.callId;
+
+                // Get or create peer connection
+                let pc = state.peerConnections[fromUserId];
+
+                if (!pc && parsedMessage.type === 'webrtc_offer') {
+                    console.log('Creating peer connection for:', fromUserId);
+                    pc = createPeerConnection(fromUserId, callId);
+                    state.peerConnections[fromUserId] = pc;
+                }
+
+                if (!pc) {
+                    console.error('No peer connection');
+                    return;
+                }
+
+                // Parse the inner signal (SDP or ICE)
+                const signal = JSON.parse(data.signal);
+                console.log('Signal type:', signal.type || 'ICE candidate');
+
+                if (parsedMessage.type === 'webrtc_offer') {
+                    // Handle offer
+                    await pc.setRemoteDescription(new RTCSessionDescription(signal));
+
+                    // Add local stream
+                    if (state.localStream && pc.getSenders().length === 0) {
+                        state.localStream.getTracks().forEach(track => {
+                            pc.addTrack(track, state.localStream);
+                        });
+                    }
+
+                    // Create and send answer
+                    const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
-                    console.log('Local description set');
 
-                    // Send answer back
                     sendWebSocketMessage('webrtc_answer', {
-                        callId: callId,
+                        callId,
                         fromUserId: state.user.id,
                         toUserId: fromUserId,
                         signal: JSON.stringify(answer)
                     });
-                    console.log('Answer sent back');
 
-                } else if (message.type === 'webrtc_answer') {
-                    console.log('Processing WebRTC answer from:', fromUserId);
-
-                    const sdpSignal = JSON.parse(signalData.signal);
-
-                    // Only set remote description if we're in the right state
+                } else if (parsedMessage.type === 'webrtc_answer') {
+                    // Handle answer
                     if (pc.signalingState === 'have-local-offer') {
-                        console.log('Setting remote description from answer');
-                        await pc.setRemoteDescription(new RTCSessionDescription(sdpSignal));
-                        console.log('Remote description set from answer');
+                        await pc.setRemoteDescription(new RTCSessionDescription(signal));
                     }
 
-                } else if (message.type === 'ice_candidate') {
-                    console.log('Processing ICE candidate from:', fromUserId);
-
-                    const candidateData = JSON.parse(signalData.signal);
-
-                    // Check for end-of-candidates marker
-                    if (!candidateData.candidate || candidateData.candidate === '') {
-                        console.log('End of ICE candidates');
-                        return;
-                    }
-
-                    try {
-                        const candidate = new RTCIceCandidate(candidateData);
-
-                        // Add candidate
-                        if (pc.remoteDescription) {
-                            await pc.addIceCandidate(candidate);
-                            console.log('ICE candidate added');
-                        } else {
-                            console.log('No remote description yet, storing candidate');
-                            // Store for later
-                            if (!state.pendingIceCandidates) state.pendingIceCandidates = {};
-                            if (!state.pendingIceCandidates[fromUserId]) {
-                                state.pendingIceCandidates[fromUserId] = [];
-                            }
-                            state.pendingIceCandidates[fromUserId].push(candidate);
-                        }
-                    } catch (e) {
-                        console.error('Error adding ICE candidate:', e);
+                } else if (parsedMessage.type === 'ice_candidate') {
+                    // Handle ICE candidate
+                    if (signal.candidate) {
+                        await pc.addIceCandidate(new RTCIceCandidate(signal));
                     }
                 }
 
             } catch (error) {
-                console.error('Error processing WebRTC signal:', error);
-                showToast('WebRTC Error', error.message);
+                console.error('Error in handleWebRTCSignal:', error);
             }
         }
 
