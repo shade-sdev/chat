@@ -67,29 +67,39 @@ private suspend fun handleWebSocketMessage(
 ) {
     try {
         println("=== RAW WebSocket message ===")
+        println("From user: $userId")
         println("Raw text: $text")
 
         // Parse the outer message
         val outerMessage = Json.decodeFromString<WSMessage>(text)
-        println("Outer message type: ${outerMessage.type}")
-        println("Outer message data string: ${outerMessage.data}")
+        println("Message type: ${outerMessage.type}")
 
         when (outerMessage.type) {
             "typing_indicator" -> {
-                // Parse the inner data
                 val indicator = Json.decodeFromString<TypingIndicator>(outerMessage.data)
-                println("Parsed typing indicator: $indicator")
-
-                // Broadcast to relevant users
+                println("Typing indicator: $indicator")
                 wsManager.broadcast(indicator)
             }
 
             "webrtc_offer", "webrtc_answer", "ice_candidate" -> {
+                // CRITICAL FIX: Parse the signal and forward it WITHOUT re-wrapping
                 val signal = Json.decodeFromString<WebRTCSignal>(outerMessage.data)
-                println("Parsed WebRTC signal: from=${signal.fromUserId}, to=${signal.toUserId}")
-
-                // Forward signal to the target user
-                wsManager.sendToUser(signal.toUserId, signal)
+                println("=== WebRTC Signal ===")
+                println("Type: ${outerMessage.type}")
+                println("From: ${signal.fromUserId}")
+                println("To: ${signal.toUserId}")
+                println("Call ID: ${signal.callId}")
+                println("Signal (first 100 chars): ${signal.signal.take(100)}")
+                
+                // FIXED: Send the ORIGINAL message type and data directly
+                // This avoids the triple-encoding issue
+                wsManager.sendToUserDirect(
+                    userId = signal.toUserId,
+                    type = outerMessage.type,
+                    data = outerMessage.data
+                )
+                
+                println("Signal forwarded to ${signal.toUserId}")
             }
 
             "mute_toggle" -> {
@@ -106,7 +116,6 @@ private suspend fun handleWebSocketMessage(
 
             "ping" -> {
                 println("Received ping from client")
-                // Send pong back
                 wsManager.sendToUser(userId, "pong")
             }
 
@@ -114,7 +123,7 @@ private suspend fun handleWebSocketMessage(
                 println("Unknown WebSocket message type: ${outerMessage.type}")
             }
         }
-        println("=== End of message processing ===")
+        println("=== End of message processing ===\n")
     } catch (e: Exception) {
         println("=== ERROR handling WebSocket message ===")
         println("Error: ${e.message}")
