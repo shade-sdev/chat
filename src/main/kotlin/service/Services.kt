@@ -52,6 +52,10 @@ class UserService(
         return userRepository.save(user)
     }
 
+    suspend fun getAllUsers(): List<User> {
+        return userRepository.findAll()
+    }
+
     suspend fun authenticate(username: String, password: String): User? {
         val user = userRepository.findByUsername(username) ?: return null
         return if (verifyPassword(password, user.passwordHash)) user else null

@@ -732,6 +732,73 @@
             display: none !important;
         }
 
+        .online-users-list {
+            padding: 0 8px;
+        }
+
+        .online-user-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .online-user-item:hover {
+            background: #34495e;
+        }
+
+        .online-user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #667eea;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .online-user-info {
+            flex: 1;
+        }
+
+        .online-user-name {
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .online-user-status {
+            font-size: 11px;
+            color: #95a5a6;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #27ae60;
+        }
+
+        .status-dot.away {
+            background: #f39c12;
+        }
+
+        .status-dot.offline {
+            background: #95a5a6;
+        }
+
+        .status-dot.in-call {
+            background: #e74c3c;
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .sidebar {
@@ -817,6 +884,12 @@
                     + New Conversation
                 </button>
                 <div id="conversationList" class="conversation-list"></div>
+                <div class="online-users-section">
+                    <h4 style="color: #95a5a6; font-size: 12px; margin: 16px 20px 8px; text-transform: uppercase;">
+                        Online Users
+                    </h4>
+                    <div id="onlineUsersList" class="online-users-list"></div>
+                </div>
             </div>
         </div>
 
@@ -1022,16 +1095,26 @@
             document.getElementById('authContainer').classList.remove('auth-container');
             document.getElementById('authContainer').style.display = 'none';
             document.getElementById('appContainer').classList.add('active');
-            
+
             // Set user info
             document.getElementById('userName').textContent = state.user.displayName;
             document.getElementById('userAvatar').textContent = state.user.displayName[0].toUpperCase();
-            
+
             // Initialize WebSocket
             connectWebSocket();
-            
-            // Load conversations
-            loadConversations();
+
+            loadConversations().then(() => {
+                // After loading conversations, render online users
+                renderOnlineUsers();
+            });
+
+            // Fetch all users to get initial statuses
+            fetchAllUsers().then(() => {
+                renderOnlineUsers();
+            });
+
+            // Set up periodic refresh (every 30 seconds)
+            setInterval(fetchAllUsers, 30000);
         }
 
         // WebSocket Functions
@@ -1291,27 +1374,78 @@
         function renderConversationList() {
             const list = document.getElementById('conversationList');
             const conversations = state.currentView === 'dms' ? state.conversations : state.groups;
-            
+
+            if (conversations.length === 0) {
+                list.innerHTML = `
+            <div style="padding: 20px; text-align: center; color: #95a5a6;">
+                No conversations yet. Start a new one!
+            </div>
+        `;
+                return;
+            }
+
             list.innerHTML = conversations.map(conv => {
-                const name = state.currentView === 'dms' 
-                    ? conv.otherUser.displayName 
-                    : conv.name;
-                
-                const isActive = state.currentConversation && state.currentConversation.id === conv.id;
-                
-                return `
-                    <div class="conversation-item ${isActive ? 'active' : ''}" 
-                         onclick='selectConversation(${JSON.stringify(conv)}, ${state.currentView === 'dms'})'>
-                        <div class="conversation-header">
-                            <span class="conversation-name">${name}</span>
-                            <span class="conversation-time"></span>
-                        </div>
-                        <div class="conversation-preview">
-                            ${state.currentView === 'dms' ? 'Direct Message' : `${conv.memberIds.length} members`}
-                        </div>
+                if (state.currentView === 'dms') {
+                    const isActive = state.currentConversation && state.currentConversation.id === conv.id;
+                    const statusColor = conv.otherUser.status === 'ONLINE' ? '#27ae60' :
+                        conv.otherUser.status === 'AWAY' ? '#f39c12' :
+                            conv.otherUser.status === 'IN_CALL' ? '#e74c3c' : '#95a5a6';
+
+                    return `
+                <div class="conversation-item ${isActive ? 'active' : ''}"
+                     onclick='selectConversation(${JSON.stringify(conv)}, true)'>
+                    <div class="conversation-header">
+                        <span class="conversation-name">${conv.otherUser.displayName}</span>
+                        <span class="conversation-time">
+                            <span style="display: inline-flex; align-items: center; gap: 4px;">
+                                <span style="width: 6px; height: 6px; border-radius: 50%; background: ${statusColor};"></span>
+                                ${conv.otherUser.status}
+                            </span>
+                        </span>
                     </div>
-                `;
+                    <div class="conversation-preview">
+                        ${conv.otherUser.status === 'IN_CALL' ? 'In a call' : 'Direct Message'}
+                    </div>
+                </div>
+            `;
+                } else {
+                    // Group rendering (keep your existing group code)
+                    const isActive = state.currentConversation && state.currentConversation.id === conv.id;
+                    return `
+                <div class="conversation-item ${isActive ? 'active' : ''}"
+                     onclick='selectConversation(${JSON.stringify(conv)}, false)'>
+                    <div class="conversation-header">
+                        <span class="conversation-name">${conv.name}</span>
+                        <span class="conversation-time"></span>
+                    </div>
+                    <div class="conversation-preview">
+                        ${conv.memberIds.length} members
+                    </div>
+                </div>
+            `;
+                }
             }).join('');
+        }
+
+        async function fetchAllUsers() {
+            try {
+                // You'll need to add this API endpoint on the backend
+                const users = await apiRequest('/users/all');
+                console.log('Fetched all users:', users);
+
+                // Update statuses in conversations
+                users.forEach(user => {
+                    state.conversations.forEach(conversation => {
+                        if (conversation.otherUser.id === user.id) {
+                            conversation.otherUser.status = user.status;
+                        }
+                    });
+                });
+
+                renderConversationList();
+            } catch (error) {
+                console.error('Error fetching users:', error);
+            }
         }
 
         function selectConversation(conversation, isDM) {
@@ -1414,19 +1548,23 @@
         function handleUserStatus(data) {
             console.log('User status update received:', data);
 
-            // Update user status in conversation list
-            if (state.currentView === 'dms') {
-                const conversation = state.conversations.find(c =>
-                    c.otherUser.id === data.userId
-                );
-                if (conversation) {
+            // Update conversations
+            state.conversations.forEach(conversation => {
+                if (conversation.otherUser.id === data.userId) {
                     conversation.otherUser.status = data.status;
-                    if (state.currentConversation && state.currentConversation.id === conversation.id) {
-                        document.getElementById('chatHeaderStatus').textContent = data.status;
-                    }
-                    renderConversationList();
                 }
+            });
+
+            // Update current chat header if needed
+            if (state.currentConversation &&
+                state.currentConversation.otherUser &&
+                state.currentConversation.otherUser.id === data.userId) {
+                document.getElementById('chatHeaderStatus').textContent = data.status;
             }
+
+            // Re-render both lists
+            renderConversationList();
+            renderOnlineUsers();
         }
 
         function handleTyping() {
@@ -1787,6 +1925,46 @@
             }
         }
 
+        function renderOnlineUsers() {
+            const container = document.getElementById('onlineUsersList');
+            const onlineUsers = [];
+
+            // Collect unique online users from conversations
+            state.conversations.forEach(conv => {
+                if (conv.otherUser.status === 'ONLINE' || conv.otherUser.status === 'AWAY') {
+                    onlineUsers.push(conv.otherUser);
+                }
+            });
+
+            if (onlineUsers.length === 0) {
+                container.innerHTML = `
+            <div style="padding: 16px; text-align: center; color: #95a5a6; font-size: 12px;">
+                No other users online
+            </div>
+        `;
+                return;
+            }
+
+            container.innerHTML = onlineUsers.map(user => {
+                const statusClass = user.status === 'ONLINE' ? '' :
+                    user.status === 'AWAY' ? 'away' :
+                        user.status === 'IN_CALL' ? 'in-call' : 'offline';
+
+                return `
+            <div class="online-user-item" onclick="startChatWithUser('${user.id}')">
+                <div class="online-user-avatar">${user.displayName[0].toUpperCase()}</div>
+                <div class="online-user-info">
+                    <div class="online-user-name">${user.displayName}</div>
+                    <div class="online-user-status">
+                        <span class="status-dot ${statusClass}"></span>
+                        ${user.status}
+                    </div>
+                </div>
+            </div>
+        `;
+            }).join('');
+        }
+
         // Modal Functions
         function showNewConversationModal() {
             document.getElementById('newConversationModal').classList.add('active');
@@ -1814,6 +1992,28 @@
             setTimeout(() => {
                 toast.remove();
             }, 5000);
+        }
+
+        async function startChatWithUser(userId) {
+            try {
+                const dm = await apiRequest('/dms', {
+                    method: 'POST',
+                    body: JSON.stringify({ recipientId: userId })
+                });
+
+                // Add to conversations if not already there
+                const exists = state.conversations.some(c => c.id === dm.id);
+                if (!exists) {
+                    state.conversations.push(dm);
+                }
+
+                selectConversation(dm, true);
+                renderConversationList();
+                renderOnlineUsers();
+            } catch (error) {
+                console.error('Error starting chat:', error);
+                showToast('Error', 'Failed to start chat');
+            }
         }
 
         // Utility Functions
