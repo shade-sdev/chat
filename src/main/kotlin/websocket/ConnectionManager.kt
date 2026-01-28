@@ -1,12 +1,6 @@
 package websocket
 
-import dto.CallInitiatedNotification
-import dto.CallStatusUpdate
-import dto.NewMessageNotification
-import dto.ParticipantUpdate
-import dto.TypingIndicator
-import dto.UserStatusUpdate
-import dto.WebRTCSignal
+import dto.*
 import io.ktor.websocket.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -35,12 +29,14 @@ class WebSocketConnectionManager {
         val session = connections[userId]
         if (session != null && !session.outgoing.isClosedForSend) {
             try {
-                // Create a properly typed wrapper message
-                val wrapper = createWebSocketMessage(message)
-                val json = Json.encodeToString(wrapper)
+                // Create a properly formatted WebSocket message
+                val wsMessage = createWebSocketMessage(message)
+                val json = Json.encodeToString(wsMessage)
+                println("Sending to user $userId: $json")
                 session.send(Frame.Text(json))
             } catch (e: Exception) {
                 println("Error sending message to user $userId: ${e.message}")
+                e.printStackTrace()
             }
         }
     }
@@ -52,8 +48,9 @@ class WebSocketConnectionManager {
     }
 
     suspend fun broadcast(message: Any) {
-        val wrapper = createWebSocketMessage(message)
-        val json = Json.encodeToString(wrapper)
+        val wsMessage = createWebSocketMessage(message)
+        val json = Json.encodeToString(wsMessage)
+        println("Broadcasting: $json")
 
         connections.values.forEach { session ->
             if (!session.outgoing.isClosedForSend) {
@@ -71,30 +68,30 @@ class WebSocketConnectionManager {
     }
 
     private fun createWebSocketMessage(message: Any): WSMessage {
+        val jsonData = Json.encodeToString(message)
         return when (message) {
-            is TypingIndicator -> WSMessage("typing_indicator", Json.encodeToString(message))
-            is NewMessageNotification -> WSMessage("new_message", Json.encodeToString(message))
-            is UserStatusUpdate -> WSMessage("user_status", Json.encodeToString(message))
-            is CallInitiatedNotification -> WSMessage("call_initiated", Json.encodeToString(message))
-            is CallStatusUpdate -> WSMessage("call_status", Json.encodeToString(message))
+            is TypingIndicator -> WSMessage("typing_indicator", jsonData)
+            is NewMessageNotification -> WSMessage("new_message", jsonData)
+            is UserStatusUpdate -> WSMessage("user_status", jsonData)
+            is CallInitiatedNotification -> WSMessage("call_initiated", jsonData)
+            is CallStatusUpdate -> WSMessage("call_status", jsonData)
             is WebRTCSignal -> {
                 val type = when {
                     message.signal.contains("\"type\":\"offer\"") -> "webrtc_offer"
                     message.signal.contains("\"type\":\"answer\"") -> "webrtc_answer"
                     else -> "ice_candidate"
                 }
-                WSMessage(type, Json.encodeToString(message))
+                WSMessage(type, jsonData)
             }
-            is ParticipantUpdate -> WSMessage("participant_update", Json.encodeToString(message))
+            is ParticipantUpdate -> WSMessage("participant_update", jsonData)
             else -> {
                 println("Unknown message type: ${message::class.simpleName}")
-                WSMessage("unknown", Json.encodeToString(message.toString()))
+                WSMessage("unknown", jsonData)
             }
         }
     }
 }
 
-// Add this data class to the same file
 @kotlinx.serialization.Serializable
 data class WSMessage(
     val type: String,

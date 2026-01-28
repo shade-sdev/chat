@@ -1,4 +1,5 @@
 import auth.UserPrincipal
+import auth.hashPassword
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.http.*
@@ -13,20 +14,28 @@ import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock.System.now
 import kotlinx.serialization.json.Json
+import models.User
 import repository.*
 import routes.*
 import service.*
 import websocket.WebSocketConnectionManager
 import java.time.Duration
 
+
 fun main() {
     embeddedServer(Netty, port = 8080, host = "0.0.0.0") {
-        configureApp()
+        CoroutineScope(Dispatchers.IO).launch {
+            configureApp()
+        }
     }.start(wait = true)
 }
 
-fun Application.configureApp() {
+suspend fun Application.configureApp() {
 
     /* ---------------------------------------------------
      * Repositories
@@ -134,5 +143,31 @@ fun Application.configureApp() {
         dmRoutes(dmService, messageService)
         callRoutes(callService)
         websocketRoute(wsManager, userService, callService)
+    }
+
+    if (userRepository.findAll().isEmpty()) {
+        val testUser1 = User(
+            id = "user1",
+            username = "alice",
+            displayName = "Alice",
+            passwordHash = hashPassword("password"),
+            createdAt = now()
+        )
+
+        val testUser2 = User(
+            id = "user2",
+            username = "bob",
+            displayName = "Bob",
+            passwordHash = hashPassword("password"),
+            createdAt = now()
+        )
+
+        userRepository.save(testUser1)
+        userRepository.save(testUser2)
+
+        // Create a test conversation
+        dmService.createOrGetConversation("user1", "user2")
+
+        println("Created test users: alice/password and bob/password")
     }
 }

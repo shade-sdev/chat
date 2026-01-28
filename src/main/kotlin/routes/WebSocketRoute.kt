@@ -5,14 +5,14 @@ import models.UserStatus
 import service.CallService
 import service.UserService
 import websocket.WebSocketConnectionManager
-import dto.TypingIndicator
-import dto.WSMessage
-import dto.WebRTCSignal
+import dto.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 fun Route.websocketRoute(
     wsManager: WebSocketConnectionManager,
@@ -47,6 +47,7 @@ fun Route.websocketRoute(
             }
         } catch (e: Exception) {
             println("WebSocket error for user $userId: ${e.message}")
+            e.printStackTrace()
         } finally {
             // Clean up on disconnect
             if (userId != null) {
@@ -65,52 +66,44 @@ private suspend fun handleWebSocketMessage(
     callService: CallService
 ) {
     try {
-        println("Received WebSocket message: $text")
+        println("=== RAW WebSocket message ===")
+        println("Raw text: $text")
 
-        // Parse the message - frontend sends {type, data} structure
-        val jsonObject = Json.parseToJsonElement(text) as JsonObject
-        val type = jsonObject["type"]?.toString()?.removeSurrounding("\"") ?: return
-        val dataString = jsonObject["data"]?.toString()?.removeSurrounding("\"") ?: return
+        // Parse the outer message
+        val outerMessage = Json.decodeFromString<WSMessage>(text)
+        println("Outer message type: ${outerMessage.type}")
+        println("Outer message data string: ${outerMessage.data}")
 
-        when (type) {
+        when (outerMessage.type) {
             "typing_indicator" -> {
-                val indicator = Json.decodeFromString<TypingIndicator>(dataString)
+                // Parse the inner data
+                val indicator = Json.decodeFromString<TypingIndicator>(outerMessage.data)
+                println("Parsed typing indicator: $indicator")
+
                 // Broadcast to relevant users
-                if (indicator.groupId != null) {
-                    // For group typing indicator
-                    // In production, you'd filter to group members only
-                    wsManager.broadcast(TypingIndicator(
-                        userId = indicator.userId,
-                        userName = indicator.userName,
-                        groupId = indicator.groupId,
-                        dmId = null,
-                        isTyping = indicator.isTyping
-                    ))
-                } else if (indicator.dmId != null) {
-                    // For DM typing indicator - send only to other participant
-                    // In production, you'd need to look up the other participant
-                    wsManager.broadcast(TypingIndicator(
-                        userId = indicator.userId,
-                        userName = indicator.userName,
-                        groupId = null,
-                        dmId = indicator.dmId,
-                        isTyping = indicator.isTyping
-                    ))
+                if (indicator.dmId != null) {
+                    // For DM typing - broadcast to everyone (in production, filter)
+                    wsManager.broadcast(indicator)
+                } else if (indicator.groupId != null) {
+                    // For group typing - broadcast to everyone (in production, filter)
+                    wsManager.broadcast(indicator)
                 }
             }
 
             "webrtc_offer", "webrtc_answer", "ice_candidate" -> {
-                val signal = Json.decodeFromString<WebRTCSignal>(dataString)
+                val signal = Json.decodeFromString<WebRTCSignal>(outerMessage.data)
+                println("Parsed WebRTC signal: from=${signal.fromUserId}, to=${signal.toUserId}")
+
                 // Forward signal to the target user
                 wsManager.sendToUser(signal.toUserId, signal)
             }
 
             "mute_toggle" -> {
-                val data = Json.parseToJsonElement(dataString).let {
-                    it as JsonObject
-                }
+                val data = Json.parseToJsonElement(outerMessage.data).jsonObject
                 val callId = data["callId"]?.toString()?.removeSurrounding("\"")
                 val isMuted = data["isMuted"]?.toString()?.toBoolean() ?: false
+
+                println("Mute toggle: callId=$callId, isMuted=$isMuted")
 
                 if (callId != null) {
                     callService.toggleMute(callId, userId, isMuted)
@@ -118,11 +111,15 @@ private suspend fun handleWebSocketMessage(
             }
 
             else -> {
-                println("Unknown WebSocket message type: $type")
+                println("Unknown WebSocket message type: ${outerMessage.type}")
             }
         }
+        println("=== End of message processing ===")
     } catch (e: Exception) {
-        println("Error handling WebSocket message: ${e.message}")
+        println("=== ERROR handling WebSocket message ===")
+        println("Error: ${e.message}")
+        println("Stack trace:")
         e.printStackTrace()
+        println("=== End error ===")
     }
 }

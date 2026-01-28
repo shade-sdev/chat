@@ -1036,111 +1036,173 @@
 
         // WebSocket Functions
         function connectWebSocket() {
-            state.ws = new WebSocket(`${WS_BASE}/ws?token=${state.token}`);
-            
+            const wsUrl = `${WS_BASE}/ws?token=${state.token}`;
+            console.log('Connecting to WebSocket:', wsUrl);
+            state.ws = new WebSocket(wsUrl);
+
             state.ws.onopen = () => {
-                console.log('WebSocket connected');
+                console.log('WebSocket connected successfully');
+                // Send a test message
+                sendWebSocketMessage('ping', { message: 'Hello from client' });
             };
-            
+
             state.ws.onmessage = (event) => {
                 try {
+                    console.log('Raw WebSocket message received:', event.data);
                     const message = JSON.parse(event.data);
+                    console.log('Parsed WebSocket message:', message);
                     handleWebSocketMessage(message);
                 } catch (error) {
                     console.error('Error parsing WebSocket message:', error);
+                    console.error('Raw data that failed:', event.data);
                 }
             };
-            
-            state.ws.onclose = () => {
-                console.log('WebSocket disconnected');
+
+            state.ws.onclose = (event) => {
+                console.log('WebSocket disconnected:', event.code, event.reason);
                 // Reconnect after 3 seconds
                 setTimeout(connectWebSocket, 3000);
             };
-            
+
             state.ws.onerror = (error) => {
                 console.error('WebSocket error:', error);
             };
         }
 
         function handleWebSocketMessage(message) {
-            console.log('WebSocket message:', message);
+            console.log('Processing WebSocket message type:', message.type);
 
-            switch (message.type) {
-                case 'new_message':
-                    handleNewMessage(message);  // message is NewMessageNotification
-                    break;
-                case 'typing_indicator':
-                    handleTypingIndicator(message);  // message is TypingIndicator
-                    break;
-                case 'user_status':
-                    handleUserStatus(message);  // message is UserStatusUpdate
-                    break;
-                case 'call_initiated':
-                    handleIncomingCall(message);  // message is CallInitiatedNotification
-                    break;
-                case 'call_status':
-                    handleCallStatusUpdate(message);  // message is CallStatusUpdate
-                    break;
-                case 'webrtc_offer':
-                case 'webrtc_answer':
-                case 'ice_candidate':
-                    handleWebRTCSignal(message);  // message is WebRTCSignal wrapper
-                    break;
-                case 'participant_update':
-                    handleParticipantUpdate(message);  // message is ParticipantUpdate
-                    break;
-                default:
-                    console.log('Unknown message type:', message.type);
+            try {
+                switch (message.type) {
+                    case 'new_message':
+                        // Parse the nested data
+                        const notification = JSON.parse(message.data);
+                        console.log('New message notification:', notification);
+                        handleNewMessage(notification);
+                        break;
+
+                    case 'typing_indicator':
+                        const typingData = JSON.parse(message.data);
+                        console.log('Typing indicator:', typingData);
+                        handleTypingIndicator(typingData);
+                        break;
+
+                    case 'user_status':
+                        const statusData = JSON.parse(message.data);
+                        console.log('User status update:', statusData);
+                        handleUserStatus(statusData);
+                        break;
+
+                    case 'call_initiated':
+                        const callInitData = JSON.parse(message.data);
+                        console.log('Call initiated:', callInitData);
+                        handleIncomingCall(callInitData);
+                        break;
+
+                    case 'call_status':
+                        const callStatusData = JSON.parse(message.data);
+                        console.log('Call status update:', callStatusData);
+                        handleCallStatusUpdate(callStatusData);
+                        break;
+
+                    case 'webrtc_offer':
+                    case 'webrtc_answer':
+                    case 'ice_candidate':
+                        const signalData = JSON.parse(message.data);
+                        console.log('WebRTC signal:', message.type, signalData);
+                        handleWebRTCSignal({
+                            type: message.type,
+                            data: signalData
+                        });
+                        break;
+
+                    case 'participant_update':
+                        const participantData = JSON.parse(message.data);
+                        console.log('Participant update:', participantData);
+                        handleParticipantUpdate(participantData);
+                        break;
+
+                    case 'ping':
+                        console.log('Ping received:', message.data);
+                        // Send pong back
+                        sendWebSocketMessage('pong', { message: 'pong' });
+                        break;
+
+                    default:
+                        console.log('Unknown message type:', message.type, 'data:', message.data);
+                }
+            } catch (error) {
+                console.error('Error processing WebSocket message:', error);
+                console.error('Message that caused error:', message);
             }
         }
 
         function sendWebSocketMessage(type, data) {
             if (state.ws && state.ws.readyState === WebSocket.OPEN) {
                 const message = {
-                    type,
-                    data: JSON.stringify(data)
+                    type: type,
+                    data: JSON.stringify(data)  // Stringify the data
                 };
                 console.log('Sending WebSocket message:', message);
                 state.ws.send(JSON.stringify(message));
+            } else {
+                console.error('WebSocket not connected');
             }
         }
-
         // API Functions
         async function apiRequest(endpoint, options = {}) {
+            console.log(`API Request: ${endpoint}`, options);
+
             const headers = {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${state.token}`,
                 ...options.headers
             };
-            
-            const response = await fetch(`${API_BASE}${endpoint}`, {
-                ...options,
-                headers
-            });
-            
-            if (!response.ok && response.status !== 204) {
-                throw new Error(`API request failed: ${response.statusText}`);
+
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    ...options,
+                    headers
+                });
+
+                console.log(`API Response: ${endpoint}`, response.status);
+
+                if (!response.ok && response.status !== 204) {
+                    const errorText = await response.text();
+                    console.error(`API Error (${response.status}):`, errorText);
+                    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+                }
+
+                if (response.status === 204) {
+                    return null;
+                }
+
+                const data = await response.json();
+                console.log(`API Data: ${endpoint}`, data);
+                return data;
+            } catch (error) {
+                console.error(`API Request failed for ${endpoint}:`, error);
+                throw error;
             }
-            
-            if (response.status === 204) {
-                return null;
-            }
-            
-            return response.json();
         }
 
         async function loadConversations() {
             try {
+                console.log('Loading conversations for view:', state.currentView);
+
                 if (state.currentView === 'dms') {
                     const dms = await apiRequest('/dms');
+                    console.log('Loaded DMs:', dms);
                     state.conversations = dms;
                 } else {
                     const groups = await apiRequest('/groups');
+                    console.log('Loaded groups:', groups);
                     state.groups = groups;
                 }
                 renderConversationList();
             } catch (error) {
                 console.error('Error loading conversations:', error);
+                showToast('Error', 'Failed to load conversations');
             }
         }
 
@@ -1294,23 +1356,37 @@
         }
 
         function handleNewMessage(notification) {
-            // The backend sends NewMessageNotification which contains a "message" field
+            // notification is NewMessageNotification object with "message" field
             const message = notification.message;
+            console.log('New message received:', message);
+
             const conversationId = message.groupId || message.dmId;
 
             if (!state.messages[conversationId]) {
                 state.messages[conversationId] = [];
             }
 
-            state.messages[conversationId].push(message);
+            // Check if message already exists
+            const exists = state.messages[conversationId].some(m => m.id === message.id);
+            if (!exists) {
+                state.messages[conversationId].push(message);
 
-            if (state.currentConversation && state.currentConversation.id === conversationId) {
-                renderMessages();
-            }
+                // Sort by timestamp
+                state.messages[conversationId].sort((a, b) =>
+                    new Date(a.createdAt) - new Date(b.createdAt)
+                );
 
-            // Show notification if not current conversation
-            if (!state.currentConversation || state.currentConversation.id !== conversationId) {
-                showToast('New Message', `${message.senderName}: ${message.content}`);
+                if (state.currentConversation && state.currentConversation.id === conversationId) {
+                    renderMessages();
+                }
+
+                // Update conversation list
+                renderConversationList();
+
+                // Show notification if not current conversation
+                if (!state.currentConversation || state.currentConversation.id !== conversationId) {
+                    showToast('New Message', `${message.senderName}: ${message.content.substring(0, 50)}...`);
+                }
             }
         }
 
@@ -1334,9 +1410,11 @@
         }
 
         function handleUserStatus(data) {
+            console.log('User status update received:', data);
+
             // Update user status in conversation list
             if (state.currentView === 'dms') {
-                const conversation = state.conversations.find(c => 
+                const conversation = state.conversations.find(c =>
                     c.otherUser.id === data.userId
                 );
                 if (conversation) {
@@ -1344,31 +1422,31 @@
                     if (state.currentConversation && state.currentConversation.id === conversation.id) {
                         document.getElementById('chatHeaderStatus').textContent = data.status;
                     }
+                    renderConversationList();
                 }
             }
         }
 
         function handleTyping() {
             if (!state.currentConversation) return;
-            
+
             clearTimeout(state.typingTimeout);
-            
-            sendWebSocketMessage('typing_indicator', {
+
+            const typingData = {
                 userId: state.user.id,
                 userName: state.user.displayName,
                 groupId: state.currentConversation.isDM ? null : state.currentConversation.id,
                 dmId: state.currentConversation.isDM ? state.currentConversation.id : null,
                 isTyping: true
-            });
-            
+            };
+
+            console.log('Sending typing start:', typingData);
+            sendWebSocketMessage('typing_indicator', typingData);
+
             state.typingTimeout = setTimeout(() => {
-                sendWebSocketMessage('typing_indicator', {
-                    userId: state.user.id,
-                    userName: state.user.displayName,
-                    groupId: state.currentConversation.isDM ? null : state.currentConversation.id,
-                    dmId: state.currentConversation.isDM ? state.currentConversation.id : null,
-                    isTyping: false
-                });
+                typingData.isTyping = false;
+                console.log('Sending typing end:', typingData);
+                sendWebSocketMessage('typing_indicator', typingData);
             }, 1000);
         }
 
