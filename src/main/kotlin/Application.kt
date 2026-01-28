@@ -7,6 +7,7 @@ import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.engine.*
+import io.ktor.server.http.content.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.cors.routing.*
@@ -25,7 +26,7 @@ import java.time.Duration
 
 
 fun main() {
-    embeddedServer(Netty, port = 8080, host = "0.0.0.0") {
+    embeddedServer(Netty, port = 8080, host = "192.168.100.110") {
         CoroutineScope(Dispatchers.IO).launch {
             configureApp()
         }
@@ -142,21 +143,34 @@ suspend fun Application.configureApp() {
      * Routing
      * --------------------------------------------------- */
     routing {
-        get("/") {
-            call.respondText("Chat API Server is running", ContentType.Text.Plain)
+        // Serve static files (HTML, CSS, JS)
+        static("/") {
+            resources(".")  // Serve files from resources root
+            defaultResource("client.html")  // Default to client.html
         }
 
+        // API Routes
         authRoutes(userService)
         userRoutes(userService)
-        groupRoutes(groupService, messageService)  // Add messageService here
+        groupRoutes(groupService, messageService)
         dmRoutes(dmService, messageService)
         callRoutes(callService)
         websocketRoute(wsManager, userService, callService)
+
+        // Fallback route - redirect to client.html
+        get("/") {
+            call.respondRedirect("/client.html")
+        }
+
+        // Health check endpoint
+        get("/health") {
+            call.respondText("OK", ContentType.Text.Plain)
+        }
     }
 
 }
 
-suspend fun initTestData(userRepository: UserRepository, dmRepository: DMRepository) {
+private suspend fun initTestData(userRepository: UserRepository, dmRepository: DMRepository) {
     // Create test users if none exist
     if (userRepository.findAll().isEmpty()) {
         println("Creating test users...")
