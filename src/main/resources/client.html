@@ -883,6 +883,7 @@
                 <button class="new-conversation-btn" onclick="showNewConversationModal()">
                     + New Conversation
                 </button>
+
                 <div id="conversationList" class="conversation-list"></div>
                 <div class="online-users-section">
                     <h4 style="color: #95a5a6; font-size: 12px; margin: 16px 20px 8px; text-transform: uppercase;">
@@ -955,6 +956,7 @@
         // Configuration
         const API_BASE = '';  // Empty since it's same origin
         const WS_BASE = window.location.origin.replace('http', 'ws');
+        let audioPlaybackAttempted = false;
 
         // Application State
         const state = {
@@ -969,7 +971,9 @@
             activeCall: null,
             peerConnections: {},
             localStream: null,
-            typingTimeout: null
+            typingTimeout: null,
+            pendingIceCandidates: {},
+            iceConnectionAttempts: {}
         };
 
         // Initialize app
@@ -980,6 +984,75 @@
                 loadUserData();
             }
         };
+
+        function setupAudioAutoplay() {
+            // Try to play all audio on any user interaction
+            document.addEventListener('click', function handleUserClick() {
+                if (!audioPlaybackAttempted) {
+                    console.log('User clicked, attempting to play audio...');
+                    playAllAudio();
+                    audioPlaybackAttempted = true;
+                    // Remove listener after first successful attempt
+                    document.removeEventListener('click', handleUserClick);
+                }
+            }, { once: false });
+
+            // Also try on keypress
+            document.addEventListener('keydown', function handleUserKey() {
+                if (!audioPlaybackAttempted) {
+                    console.log('User pressed key, attempting to play audio...');
+                    playAllAudio();
+                    audioPlaybackAttempted = true;
+                    document.removeEventListener('keydown', handleUserKey);
+                }
+            }, { once: false });
+        }
+
+        function restartICE(otherUserId) {
+            const pc = state.peerConnections[otherUserId];
+            if (pc) {
+                console.log('Manually restarting ICE...');
+                try {
+                    pc.restartIce();
+                    showToast('ICE Restart', 'Restarting connection...');
+                } catch (e) {
+                    console.error('Failed to restart ICE:', e);
+                }
+            }
+        }
+
+        function checkConnectionDetails() {
+            Object.entries(state.peerConnections).forEach(([userId, pc]) => {
+                console.log(`=== Connection details for ${userId} ===`);
+
+                // Get stats
+                pc.getStats().then(stats => {
+                    stats.forEach(report => {
+                        if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                            console.log('Successful candidate pair:', report);
+                        }
+                        if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+                            console.log('Inbound audio RTP:', report);
+                            console.log('  - Packets received:', report.packetsReceived);
+                            console.log('  - Bytes received:', report.bytesReceived);
+                        }
+                        if (report.type === 'outbound-rtp' && report.kind === 'audio') {
+                            console.log('Outbound audio RTP:', report);
+                        }
+                    });
+                }).catch(e => console.error('Error getting stats:', e));
+
+                console.log(`Senders: ${pc.getSenders().length}`);
+                pc.getSenders().forEach((sender, i) => {
+                    console.log(`  Sender ${i}:`, sender.track ? sender.track.kind : 'No track');
+                });
+
+                console.log(`Receivers: ${pc.getReceivers().length}`);
+                pc.getReceivers().forEach((receiver, i) => {
+                    console.log(`  Receiver ${i}:`, receiver.track ? receiver.track.kind : 'No track');
+                });
+            });
+        }
 
         // Auth Functions
         function toggleAuthMode() {
@@ -1031,6 +1104,33 @@
             } catch (error) {
                 showAuthError('Network error. Please try again.');
             }
+        }
+
+        function listAudioElements() {
+            console.log('=== Listing all audio elements ===');
+            const audioElements = document.querySelectorAll('audio');
+            console.log(`Total audio elements: ${audioElements.length}`);
+
+            audioElements.forEach((audio, index) => {
+                console.log(`Audio ${index}:`);
+                console.log(`  ID: ${audio.id}`);
+                console.log(`  srcObject: ${audio.srcObject ? 'Yes' : 'No'}`);
+                console.log(`  paused: ${audio.paused}`);
+                console.log(`  muted: ${audio.muted}`);
+                console.log(`  volume: ${audio.volume}`);
+                console.log(`  currentTime: ${audio.currentTime}`);
+
+                if (audio.srcObject) {
+                    const stream = audio.srcObject;
+                    console.log(`  Stream active: ${stream.active}`);
+                    console.log(`  Tracks: ${stream.getTracks().length}`);
+                    stream.getTracks().forEach(track => {
+                        console.log(`    Track: ${track.kind}, enabled: ${track.enabled}, muted: ${track.muted}`);
+                    });
+                }
+            });
+
+            console.log('=== End audio list ===');
         }
 
         async function register() {
@@ -1112,10 +1212,48 @@
             fetchAllUsers().then(() => {
                 renderOnlineUsers();
             });
+            setupAudioAutoplay();
 
             // Set up periodic refresh (every 30 seconds)
             setInterval(fetchAllUsers, 30000);
         }
+
+        function parseWebSocketMessage(rawData) {
+            try {
+                console.log('Parsing raw message:', rawData);
+
+                // Parse the outer JSON
+                const outer = JSON.parse(rawData);
+
+                // Parse the data field
+                let data = outer.data;
+                if (typeof data === 'string') {
+                    try {
+                        // Remove extra escaping
+                        data = data.replace(/\\"/g, '"');
+                        // Remove surrounding quotes
+                        if (data.startsWith('"') && data.endsWith('"')) {
+                            data = data.slice(1, -1);
+                        }
+                        data = JSON.parse(data);
+                    } catch (e) {
+                        console.error('Could not parse data field:', e);
+                        // Leave as string
+                    }
+                }
+
+                // Return combined object
+                return {
+                    type: outer.type,
+                    ...data
+                };
+
+            } catch (error) {
+                console.error('Parse error:', error);
+                return null;
+            }
+        }
+
 
         // WebSocket Functions
         function connectWebSocket() {
@@ -1130,14 +1268,10 @@
             };
 
             state.ws.onmessage = (event) => {
-                try {
-                    console.log('Raw WebSocket message received:', event.data);
-                    const message = JSON.parse(event.data);
-                    console.log('Parsed WebSocket message:', message);
+                const message = parseWebSocketMessage(event.data);
+                if (message) {
+                    console.log('Dispatching message:', message.type, message);
                     handleWebSocketMessage(message);
-                } catch (error) {
-                    console.error('Error parsing WebSocket message:', error);
-                    console.error('Raw data that failed:', event.data);
                 }
             };
 
@@ -1152,73 +1286,61 @@
             };
         }
 
-        function handleWebSocketMessage(message) {
-            console.log('Processing WebSocket message type:', message.type);
+        function debugSignal(message) {
+            console.log('=== DEBUG SIGNAL ===');
+            console.log('Message type:', message.type);
+            console.log('Message data type:', typeof message.data);
+            console.log('Message data:', message.data);
 
             try {
-                switch (message.type) {
-                    case 'new_message':
-                        // Parse the nested data
-                        const notification = JSON.parse(message.data);
-                        console.log('New message notification:', notification);
-                        handleNewMessage(notification);
-                        break;
-
-                    case 'typing_indicator':
-                        const typingData = JSON.parse(message.data);
-                        console.log('Typing indicator:', typingData);
-                        handleTypingIndicator(typingData);
-                        break;
-
-                    case 'user_status':
-                        const statusData = JSON.parse(message.data);
-                        console.log('User status update:', statusData);
-                        handleUserStatus(statusData);
-                        break;
-
-                    case 'call_initiated':
-                        const callInitData = JSON.parse(message.data);
-                        console.log('Call initiated:', callInitData);
-                        handleIncomingCall(callInitData);
-                        break;
-
-                    case 'call_status':
-                        const callStatusData = JSON.parse(message.data);
-                        console.log('Call status update:', callStatusData);
-                        handleCallStatusUpdate(callStatusData);
-                        break;
-
-                    case 'webrtc_offer':
-                    case 'webrtc_answer':
-                    case 'ice_candidate':
-                        const signalData = JSON.parse(message.data);
-                        console.log('WebRTC signal:', message.type, signalData);
-                        handleWebRTCSignal({
-                            type: message.type,
-                            data: signalData
-                        });
-                        break;
-
-                    case 'participant_update':
-                        const participantData = JSON.parse(message.data);
-                        console.log('Participant update:', participantData);
-                        handleParticipantUpdate(participantData);
-                        break;
-
-                    case 'pong':
-                        console.log('Pong received from server');
-                        break;
-
-                    case 'unknown':
-                        console.log('Unknown message from server:', message.data);
-                        break;
-
-                    default:
-                        console.log('Unknown message type:', message.type, 'data:', message.data);
+                if (typeof message.data === 'string') {
+                    const parsed = JSON.parse(message.data);
+                    console.log('Parsed data:', parsed);
+                    console.log('toUserId:', parsed.toUserId);
+                    console.log('fromUserId:', parsed.fromUserId);
+                    console.log('Our userId:', state.user.id);
+                    console.log('Match?', parsed.toUserId === state.user.id);
                 }
-            } catch (error) {
-                console.error('Error processing WebSocket message:', error);
-                console.error('Message that caused error:', message);
+            } catch (e) {
+                console.error('Parse error:', e);
+            }
+            console.log('=== END DEBUG ===');
+        }
+
+        function handleWebSocketMessage(message) {
+            console.log('Handling message type:', message.type);
+
+            switch (message.type) {
+                case 'new_message':
+                    handleNewMessage(message);
+                    break;
+                case 'typing_indicator':
+                    handleTypingIndicator(message);
+                    break;
+                case 'user_status':
+                    handleUserStatus(message);
+                    break;
+                case 'call_initiated':
+                    // This now has {type: 'call_initiated', call: {...}, callerName: '...'}
+                    handleIncomingCall(message);
+                    break;
+                case 'call_status':
+                    handleCallStatusUpdate(message);
+                    break;
+                case 'webrtc_offer':
+                case 'webrtc_answer':
+                case 'ice_candidate':
+                    // WebRTC signals need special handling
+                    handleWebRTCSignal({
+                        type: message.type,
+                        data: JSON.stringify(message) // Re-stringify for handleWebRTCSignal
+                    });
+                    break;
+                case 'participant_update':
+                    handleParticipantUpdate(message);
+                    break;
+                default:
+                    console.log('Unknown message type:', message.type);
             }
         }
 
@@ -1226,7 +1348,7 @@
             if (state.ws && state.ws.readyState === WebSocket.OPEN) {
                 const message = {
                     type: type,
-                    data: JSON.stringify(data)  // Stringify the data
+                    data: JSON.stringify(data)
                 };
                 console.log('Sending WebSocket message:', message);
                 state.ws.send(JSON.stringify(message));
@@ -1234,6 +1356,24 @@
                 console.error('WebSocket not connected');
             }
         }
+
+        function testSDPMessage() {
+            // Test if SDP messages are being sent/received properly
+            console.log('Testing SDP message format...');
+
+            const testOffer = {
+                type: 'offer',
+                sdp: 'v=0\r\no=- 123456 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=mid:0\r\na=sendonly\r\na=rtpmap:111 opus/48000/2\r\na=fmtp:111 minptime=10;useinbandfec=1\r\na=ice-ufrag:abc123\r\na=ice-pwd:def456\r\na=fingerprint:sha-256 AA:BB:CC\r\na=setup:actpass\r\na=rtcp-mux\r\n'
+            };
+
+            sendWebSocketMessage('webrtc_offer', {
+                callId: 'test-call',
+                fromUserId: state.user.id,
+                toUserId: 'test-user',
+                signal: JSON.stringify(testOffer)
+            });
+        }
+
         // API Functions
         async function apiRequest(endpoint, options = {}) {
             console.log(`API Request: ${endpoint}`, options);
@@ -1668,52 +1808,189 @@
             }
         }
 
-        async function handleIncomingCall(data) {
-            state.activeCall = data.call;
-            showCallUI('Incoming Call', data.callerName, true);
+        async function handleIncomingCall(message) {
+            console.log('Handling incoming call message:', message);
+
+            try {
+                // The message structure is different for call_initiated
+                // It has { call: {...}, callerName: "..." } structure
+                if (!message.call) {
+                    console.error('Invalid call message structure:', message);
+                    return;
+                }
+
+                state.activeCall = message.call;
+
+                // Get the caller name
+                const callerName = message.callerName || 'Unknown';
+
+                console.log(`Incoming call from ${callerName}, call ID: ${message.call.id}`);
+
+                // Show the call UI
+                showCallUI('Incoming Call', callerName, true);
+
+                // Create peer connection for this call
+                if (message.call.type === 'DIRECT') {
+                    const callerId = message.call.initiatorId;
+                    console.log('Setting up peer connection for caller:', callerId);
+
+                    // Check if we already have a connection
+                    if (!state.peerConnections[callerId]) {
+                        const pc = createPeerConnection(callerId, message.call.id);
+                        state.peerConnections[callerId] = pc;
+                        console.log('Created peer connection for incoming call');
+                    } else {
+                        console.log('Peer connection already exists for caller');
+                    }
+                }
+
+            } catch (error) {
+                console.error('Error in handleIncomingCall:', error);
+                showToast('Error', 'Failed to handle incoming call');
+            }
         }
 
         async function acceptCall() {
-            if (!state.activeCall) return;
+            console.log('Accept call clicked');
+
+            if (!state.activeCall) {
+                console.error('No active call to accept');
+                showToast('Error', 'No call to accept');
+                return;
+            }
+
+            console.log('Accepting call:', state.activeCall.id);
 
             try {
-                console.log('Accepting call, requesting microphone...');
+                // Get user media if not already available
+                if (!state.localStream) {
+                    console.log('Requesting microphone for accepting call...');
+                    state.localStream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        },
+                        video: false
+                    });
+                    console.log('Got local stream for accepting call');
+                }
 
-                // Get user media
-                state.localStream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
-                    },
-                    video: false
-                });
-
-                console.log('Got local stream for accepting call');
-
+                // Accept on server
+                console.log('Sending accept to server...');
                 await apiRequest(`/calls/${state.activeCall.id}/accept`, {
                     method: 'POST'
                 });
 
-                // Create answer if this is a direct call
+                console.log('Call accepted on server');
+
+                // Update UI
+                const participantName = getCallParticipantName();
+                showCallUI('In Call', participantName);
+                startCallTimer();
+
+                // For direct calls, ensure we have peer connection
                 if (state.activeCall.type === 'DIRECT') {
-                    const otherUserId = state.activeCall.initiatorId === state.user.id
-                        ? state.activeCall.recipientId
-                        : state.activeCall.initiatorId;
-                    console.log('Will create answer for:', otherUserId);
-                    // The answer will be created when we receive the offer
+                    const otherUserId = state.activeCall.initiatorId;
+                    console.log('Ensuring peer connection for:', otherUserId);
+
+                    let pc = state.peerConnections[otherUserId];
+                    if (!pc) {
+                        console.log('Creating peer connection for accepted call');
+                        pc = createPeerConnection(otherUserId, state.activeCall.id);
+                        state.peerConnections[otherUserId] = pc;
+                    }
+
+                    // Add local tracks
+                    if (state.localStream && pc.getSenders().length === 0) {
+                        console.log('Adding local tracks to peer connection');
+                        state.localStream.getTracks().forEach(track => {
+                            pc.addTrack(track, state.localStream);
+                        });
+                    }
                 }
 
-                showCallUI('In Call', getCallParticipantName());
-                startCallTimer();
+                showToast('Call Accepted', 'You are now in the call');
+
             } catch (error) {
                 console.error('Error accepting call:', error);
-                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                    showToast('Microphone Permission', 'Please allow microphone access to answer calls');
-                } else {
-                    showToast('Error', 'Failed to accept call');
-                }
+                showToast('Error', 'Failed to accept call: ' + error.message);
             }
+        }
+
+        function debugCallState() {
+            console.log('=== CALL STATE DEBUG ===');
+            console.log('Active call:', state.activeCall);
+            console.log('Local stream:', state.localStream ? 'Yes' : 'No');
+            console.log('Peer connections:', Object.keys(state.peerConnections).length);
+
+            // Check UI elements
+            const overlay = document.getElementById('callOverlay');
+            console.log('Call overlay active?', overlay?.classList.contains('active'));
+
+            // Check if audio is playing
+            const audioElements = document.querySelectorAll('audio');
+            console.log('Audio elements:', audioElements.length);
+            audioElements.forEach(audio => {
+                console.log(`  ${audio.id}: playing=${!audio.paused}, srcObject=${!!audio.srcObject}`);
+            });
+
+            console.log('=== END DEBUG ===');
+        }
+
+        // Add to debug buttons
+        document.querySelector('.debug-buttons').innerHTML += `
+    <button onclick="debugCallState()" style="background: #34495e; color: white; border: none; padding: 8px; border-radius: 4px;">
+        Debug Call State
+    </button>
+`;
+
+        async function createNewOffer() {
+            if (!state.activeCall || !state.activeCall.type === 'DIRECT') {
+                showToast('Error', 'No active direct call');
+                return;
+            }
+
+            const otherUserId = state.activeCall.initiatorId === state.user.id
+                ? state.activeCall.recipientId
+                : state.activeCall.initiatorId;
+
+            console.log('Creating new offer for:', otherUserId);
+
+            // Close existing connection
+            if (state.peerConnections[otherUserId]) {
+                state.peerConnections[otherUserId].close();
+                delete state.peerConnections[otherUserId];
+            }
+
+            // Create new offer
+            await createOffer(state.activeCall.id, otherUserId);
+        }
+
+        function addAudioTransceiver(otherUserId) {
+            const pc = state.peerConnections[otherUserId];
+            if (pc) {
+                console.log('Manually adding audio transceiver...');
+
+                // Add transceiver for receiving audio
+                const transceiver = pc.addTransceiver('audio', {
+                    direction: 'recvonly'  // We want to receive audio
+                });
+
+                console.log('Transceiver added:', transceiver);
+
+                // Also ensure we have a sender for our audio
+                if (state.localStream && pc.getSenders().length === 0) {
+                    const audioTrack = state.localStream.getAudioTracks()[0];
+                    if (audioTrack) {
+                        console.log('Adding audio track to sender');
+                        pc.addTrack(audioTrack, state.localStream);
+                    }
+                }
+
+                return transceiver;
+            }
+            return null;
         }
 
         async function rejectCall() {
@@ -1746,6 +2023,34 @@
 
             console.log(debugText);
             showToast('Debug Info', debugText);
+        }
+
+        function checkAllConnections() {
+            console.log('=== Checking All Connections ===');
+
+            // Check WebSocket
+            console.log('WebSocket state:', state.ws ? state.ws.readyState : 'No WebSocket');
+
+            // Check peer connections
+            Object.entries(state.peerConnections).forEach(([userId, pc]) => {
+                console.log(`Peer connection for ${userId}:`);
+                console.log('  - ICE state:', pc.iceConnectionState);
+                console.log('  - Signaling state:', pc.signalingState);
+                console.log('  - Connection state:', pc.connectionState);
+                console.log('  - Local tracks:', pc.getSenders().length);
+                console.log('  - Remote tracks:', pc.getReceivers().length);
+            });
+
+            // Check audio elements
+            document.querySelectorAll('audio').forEach(audio => {
+                console.log(`Audio element ${audio.id}:`);
+                console.log('  - srcObject:', audio.srcObject ? 'Yes' : 'No');
+                console.log('  - paused:', audio.paused);
+                console.log('  - muted:', audio.muted);
+                console.log('  - volume:', audio.volume);
+            });
+
+            console.log('=== End Connection Check ===');
         }
 
         async function endCall() {
@@ -1816,78 +2121,59 @@
 
         // WebRTC Functions
         async function createOffer(callId, recipientId) {
-            console.log('Creating offer for call:', callId, 'recipient:', recipientId);
+            console.log('Creating offer for:', recipientId);
 
             try {
-                const pc = new RTCPeerConnection({
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' },
-                        { urls: 'stun:stun2.l.google.com:19302' }
-                    ]
-                });
-
-                state.peerConnections[recipientId] = pc;
-
-                // Add local stream tracks
-                if (state.localStream) {
-                    console.log('Adding local stream tracks to peer connection');
-                    state.localStream.getTracks().forEach(track => {
-                        pc.addTrack(track, state.localStream);
-                    });
+                // First, ensure we have a local stream
+                if (!state.localStream) {
+                    console.error('No local stream available');
+                    showToast('Error', 'No microphone access');
+                    return;
                 }
 
-                // Handle ICE candidates
-                pc.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        console.log('Sending ICE candidate:', event.candidate);
-                        sendWebSocketMessage('ice_candidate', {
-                            callId,
-                            fromUserId: state.user.id,
-                            toUserId: recipientId,
-                            signal: JSON.stringify(event.candidate)
-                        });
-                    } else {
-                        console.log('All ICE candidates gathered');
-                    }
-                };
+                console.log('Local stream tracks:', state.localStream.getTracks());
 
-                // Handle ICE connection state
-                pc.oniceconnectionstatechange = () => {
-                    console.log('ICE connection state:', pc.iceConnectionState);
-                };
+                // Create peer connection
+                const pc = createPeerConnection(recipientId, callId);
+                state.peerConnections[recipientId] = pc;
 
-                // Handle remote stream
-                pc.ontrack = (event) => {
-                    console.log('Received remote track:', event.track.kind);
-                    const audio = document.createElement('audio');
-                    audio.id = `remote-audio-${recipientId}`;
-                    audio.autoplay = true;
-                    audio.controls = false;
-                    audio.style.display = 'none';
-                    audio.srcObject = event.streams[0];
+                // Add ALL tracks from local stream
+                console.log('Adding local tracks to peer connection...');
+                state.localStream.getTracks().forEach(track => {
+                    console.log('Adding track:', track.kind, track.id);
+                    pc.addTrack(track, state.localStream);
+                });
 
-                    document.body.appendChild(audio);
+                // Wait a bit to ensure tracks are added
+                await new Promise(resolve => setTimeout(resolve, 100));
 
-                    // Play the audio
-                    audio.play().catch(e => {
-                        console.error('Error playing remote audio:', e);
-                    });
+                // Check what we have
+                console.log('Senders after adding tracks:', pc.getSenders().length);
+                pc.getSenders().forEach((sender, i) => {
+                    console.log(`Sender ${i}:`, sender.track ? sender.track.kind : 'No track');
+                });
 
-                    console.log('Remote stream added, tracks:', event.streams[0].getTracks());
-                };
-
-                // Create and send offer
-                console.log('Creating SDP offer...');
+                // Create offer with audio
+                console.log('Creating offer...');
                 const offer = await pc.createOffer({
                     offerToReceiveAudio: true,
                     offerToReceiveVideo: false
                 });
 
-                console.log('Setting local description...');
-                await pc.setLocalDescription(offer);
+                console.log('Offer created:', offer.type);
+                console.log('SDP (first 200 chars):', offer.sdp.substring(0, 200));
 
-                console.log('Sending offer:', offer);
+                // Check if SDP has audio media
+                if (offer.sdp.includes('m=audio')) {
+                    console.log('SDP contains audio media line ✓');
+                } else {
+                    console.warn('SDP does NOT contain audio media line!');
+                }
+
+                await pc.setLocalDescription(offer);
+                console.log('Local description set');
+
+                // Send offer
                 sendWebSocketMessage('webrtc_offer', {
                     callId,
                     fromUserId: state.user.id,
@@ -1895,9 +2181,62 @@
                     signal: JSON.stringify(offer)
                 });
 
+                console.log('Offer sent');
+
             } catch (error) {
                 console.error('Error creating offer:', error);
-                showToast('Error', 'Failed to create call offer');
+                showToast('Error', 'Failed to create offer: ' + error.message);
+            }
+        }
+
+        async function testAudio() {
+            try {
+                console.log('Testing audio...');
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+                const audio = document.createElement('audio');
+                audio.autoplay = true;
+                audio.srcObject = stream;
+                document.body.appendChild(audio);
+
+                console.log('Audio test - you should hear yourself (echo):');
+                console.log('Stream active:', stream.active);
+                console.log('Audio tracks:', stream.getAudioTracks().length);
+
+                showToast('Audio Test', 'You should hear yourself. Check console for details.');
+
+            } catch (error) {
+                console.error('Audio test failed:', error);
+                showToast('Audio Test Failed', error.message);
+            }
+        }
+
+        function playAllAudio() {
+            console.log('Attempting to play all audio elements...');
+            let playedCount = 0;
+
+            document.querySelectorAll('audio').forEach(audio => {
+                if (audio.paused && audio.srcObject) {
+                    console.log('Playing audio:', audio.id);
+                    audio.play().then(() => {
+                        console.log('Audio playing:', audio.id);
+                        playedCount++;
+                        showToast('Audio', `Started playing ${playedCount} audio stream(s)`);
+                    }).catch(e => {
+                        console.error('Failed to play audio:', audio.id, e);
+                        // For autoplay issues, show a message to user
+                        if (e.name === 'NotAllowedError') {
+                            showToast('Audio Permission', 'Click the page to allow audio playback');
+                        }
+                    });
+                } else if (audio.srcObject) {
+                    console.log('Audio already playing:', audio.id);
+                    playedCount++;
+                }
+            });
+
+            if (playedCount === 0) {
+                console.log('No audio elements found or all are already playing');
             }
         }
 
@@ -1966,31 +2305,123 @@
             console.log('Answer peer connection created, waiting for offer...');
         }
 
+        function createPeerConnection(otherUserId, callId) {
+            console.log('Creating peer connection for:', otherUserId);
+
+            const pc = new RTCPeerConnection({
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' }
+                ],
+                iceTransportPolicy: 'all'
+            });
+
+            // Log when transceivers are created
+            pc.ontrack = (event) => {
+                console.log('ONTrack event fired!');
+                console.log('Event:', event);
+                console.log('Streams:', event.streams.length);
+                console.log('Track:', event.track);
+
+                if (event.streams && event.streams[0]) {
+                    console.log('Creating audio element for remote stream');
+                    const audio = document.createElement('audio');
+                    audio.id = `remote-audio-${otherUserId}`;
+                    audio.autoplay = true;
+                    audio.playsInline = true;
+                    audio.controls = false;
+                    audio.style.display = 'none';
+                    audio.srcObject = event.streams[0];
+
+                    document.body.appendChild(audio);
+
+                    audio.play().catch(e => {
+                        console.error('Autoplay failed:', e);
+                        showToast('Audio', 'Click to enable audio');
+                    });
+                }
+            };
+
+            // Monitor transceiver creation
+            const originalAddTransceiver = pc.addTransceiver.bind(pc);
+            pc.addTransceiver = function(...args) {
+                console.log('addTransceiver called with:', args);
+                return originalAddTransceiver(...args);
+            };
+
+            // Monitor track addition
+            const originalAddTrack = pc.addTrack.bind(pc);
+            pc.addTrack = function(track, ...streams) {
+                console.log('addTrack called:');
+                console.log('Track:', track.kind, track.id, track.enabled);
+                console.log('Streams:', streams);
+                return originalAddTrack(track, ...streams);
+            };
+
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    console.log('ICE candidate:', event.candidate.candidate);
+                    sendWebSocketMessage('ice_candidate', {
+                        callId,
+                        fromUserId: state.user.id,
+                        toUserId: otherUserId,
+                        signal: JSON.stringify(event.candidate)
+                    });
+                }
+            };
+
+            pc.oniceconnectionstatechange = () => {
+                console.log('ICE state:', pc.iceConnectionState);
+            };
+
+            pc.onsignalingstatechange = () => {
+                console.log('Signaling state:', pc.signalingState);
+            };
+
+            return pc;
+        }
+
         async function handleWebRTCSignal(message) {
-            console.log('Processing WebRTC signal:', message.type);
-            console.log('Signal data:', message);
+            console.log('Processing WebRTC signal type:', message.type);
+            console.log('Full message:', message);
+            debugSignal(message); // Add this line
 
-            const data = message;
-
-            if (data.toUserId !== state.user.id) {
-                console.log('Signal not for this user, ignoring');
+            // The message from backend has a "data" field that contains a JSON string
+            // We need to parse the data field first
+            let signalData;
+            try {
+                // First, check if data is already an object or a string
+                if (typeof message.data === 'string') {
+                    signalData = JSON.parse(message.data);
+                } else {
+                    signalData = message.data;
+                }
+                console.log('Parsed signal data:', signalData);
+            } catch (e) {
+                console.error('Failed to parse signal data:', e);
+                console.log('Raw data:', message.data);
                 return;
             }
 
-            let pc = state.peerConnections[data.fromUserId];
+            // Now check if this signal is for us
+            if (signalData.toUserId !== state.user.id) {
+                console.log(`Signal not for us. To: ${signalData.toUserId}, We are: ${state.user.id}`);
+                return;
+            }
 
-            // If we don't have a peer connection yet, create one (for answer)
+            console.log(`Signal is for us (${state.user.id}), processing...`);
+
+            const fromUserId = signalData.fromUserId;
+            const callId = signalData.callId;
+
+            // Get or create peer connection
+            let pc = state.peerConnections[fromUserId];
+
             if (!pc && message.type === 'webrtc_offer') {
-                console.log('No peer connection found, creating one for answer');
-                pc = new RTCPeerConnection({
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' },
-                        { urls: 'stun:stun2.l.google.com:19302' }
-                    ]
-                });
-
-                state.peerConnections[data.fromUserId] = pc;
+                console.log('Creating new peer connection for offer from:', fromUserId);
+                pc = createPeerConnection(fromUserId, callId);
+                state.peerConnections[fromUserId] = pc;
 
                 // Add local stream if we have it
                 if (state.localStream) {
@@ -1999,96 +2430,95 @@
                         pc.addTrack(track, state.localStream);
                     });
                 }
-
-                // Set up event handlers
-                pc.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        console.log('Sending ICE candidate from answer side');
-                        sendWebSocketMessage('ice_candidate', {
-                            callId: data.callId,
-                            fromUserId: state.user.id,
-                            toUserId: data.fromUserId,
-                            signal: JSON.stringify(event.candidate)
-                        });
-                    }
-                };
-
-                pc.ontrack = (event) => {
-                    console.log('Received remote track from offer:', event.track.kind);
-                    const audio = document.createElement('audio');
-                    audio.id = `remote-audio-${data.fromUserId}`;
-                    audio.autoplay = true;
-                    audio.controls = false;
-                    audio.style.display = 'none';
-                    audio.srcObject = event.streams[0];
-
-                    document.body.appendChild(audio);
-
-                    audio.play().catch(e => {
-                        console.error('Error playing remote audio from offer:', e);
-                    });
-                };
-
-                pc.oniceconnectionstatechange = () => {
-                    console.log('ICE connection state:', pc.iceConnectionState);
-                    if (pc.iceConnectionState === 'connected') {
-                        console.log('WebRTC connection established!');
-                        showToast('Call Connected', 'Audio should now be working');
-                    }
-                };
             }
 
             if (!pc) {
-                console.error('No peer connection available');
+                console.error('No peer connection available for:', fromUserId);
                 return;
             }
 
             try {
                 if (message.type === 'webrtc_offer') {
-                    console.log('Processing WebRTC offer');
-                    const offer = JSON.parse(data.signal);
-                    console.log('Offer SDP:', offer.sdp?.substring(0, 100) + '...');
+                    console.log('Processing WebRTC offer from:', fromUserId);
 
-                    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+                    // Parse the SDP signal
+                    const sdpSignal = JSON.parse(signalData.signal);
+                    console.log('SDP signal type:', sdpSignal.type);
+
+                    // Check if we already have a remote description
+                    if (pc.remoteDescription) {
+                        console.log('Already have remote description, ignoring duplicate offer');
+                        return;
+                    }
+
+                    console.log('Setting remote description...');
+                    await pc.setRemoteDescription(new RTCSessionDescription(sdpSignal));
                     console.log('Remote description set');
 
+                    // Create answer
                     console.log('Creating answer...');
                     const answer = await pc.createAnswer({
                         offerToReceiveAudio: true,
                         offerToReceiveVideo: false
                     });
 
-                    console.log('Setting local description (answer)...');
+                    console.log('Setting local description...');
                     await pc.setLocalDescription(answer);
-                    console.log('Answer SDP:', answer.sdp?.substring(0, 100) + '...');
+                    console.log('Local description set');
 
+                    // Send answer back
                     sendWebSocketMessage('webrtc_answer', {
-                        callId: data.callId,
+                        callId: callId,
                         fromUserId: state.user.id,
-                        toUserId: data.fromUserId,
+                        toUserId: fromUserId,
                         signal: JSON.stringify(answer)
                     });
-                    console.log('Answer sent');
+                    console.log('Answer sent back');
 
                 } else if (message.type === 'webrtc_answer') {
-                    console.log('Processing WebRTC answer');
-                    const answer = JSON.parse(data.signal);
-                    console.log('Answer SDP:', answer.sdp?.substring(0, 100) + '...');
+                    console.log('Processing WebRTC answer from:', fromUserId);
 
-                    await pc.setRemoteDescription(new RTCSessionDescription(answer));
-                    console.log('Remote answer description set');
+                    const sdpSignal = JSON.parse(signalData.signal);
+
+                    // Only set remote description if we're in the right state
+                    if (pc.signalingState === 'have-local-offer') {
+                        console.log('Setting remote description from answer');
+                        await pc.setRemoteDescription(new RTCSessionDescription(sdpSignal));
+                        console.log('Remote description set from answer');
+                    }
 
                 } else if (message.type === 'ice_candidate') {
-                    console.log('Processing ICE candidate');
-                    const candidate = JSON.parse(data.signal);
+                    console.log('Processing ICE candidate from:', fromUserId);
 
-                    if (candidate.candidate) {
-                        await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                        console.log('ICE candidate added');
-                    } else {
-                        console.log('All ICE candidates received');
+                    const candidateData = JSON.parse(signalData.signal);
+
+                    // Check for end-of-candidates marker
+                    if (!candidateData.candidate || candidateData.candidate === '') {
+                        console.log('End of ICE candidates');
+                        return;
+                    }
+
+                    try {
+                        const candidate = new RTCIceCandidate(candidateData);
+
+                        // Add candidate
+                        if (pc.remoteDescription) {
+                            await pc.addIceCandidate(candidate);
+                            console.log('ICE candidate added');
+                        } else {
+                            console.log('No remote description yet, storing candidate');
+                            // Store for later
+                            if (!state.pendingIceCandidates) state.pendingIceCandidates = {};
+                            if (!state.pendingIceCandidates[fromUserId]) {
+                                state.pendingIceCandidates[fromUserId] = [];
+                            }
+                            state.pendingIceCandidates[fromUserId].push(candidate);
+                        }
+                    } catch (e) {
+                        console.error('Error adding ICE candidate:', e);
                     }
                 }
+
             } catch (error) {
                 console.error('Error processing WebRTC signal:', error);
                 showToast('WebRTC Error', error.message);
@@ -2148,26 +2578,35 @@
 
         // Call UI Functions
         function showCallUI(status, participant, isIncoming = false) {
-            document.getElementById('callOverlay').classList.add('active');
-            document.getElementById('callStatus').textContent = status;
-            document.getElementById('callParticipant').textContent = participant;
-            
-            const controls = document.getElementById('callControls');
-            
-            if (isIncoming) {
-                controls.innerHTML = `
-                    <button class="call-btn accept" onclick="acceptCall()" title="Accept">✓</button>
-                    <button class="call-btn reject" onclick="rejectCall()" title="Reject">✗</button>
-                `;
-            } else {
-                controls.innerHTML = `
-                    <button class="call-btn mute" onclick="toggleMute()" title="Mute">🔇</button>
-                    <button class="call-btn end" onclick="endCall()" title="End Call">✗</button>
-                                    <button class="call-btn end" onclick="showWebRTCDebug()">
-                    Debug WebRTC
-                </button>
-                `;
+            console.log('Showing call UI:', { status, participant, isIncoming });
+
+            const overlay = document.getElementById('callOverlay');
+            const statusEl = document.getElementById('callStatus');
+            const participantEl = document.getElementById('callParticipant');
+            const controlsEl = document.getElementById('callControls');
+
+            if (!overlay || !statusEl || !participantEl || !controlsEl) {
+                console.error('Call UI elements not found');
+                return;
             }
+
+            overlay.classList.add('active');
+            statusEl.textContent = status;
+            participantEl.textContent = participant;
+
+            if (isIncoming) {
+                controlsEl.innerHTML = `
+            <button class="call-btn accept" onclick="acceptCall()" title="Accept">✓</button>
+            <button class="call-btn reject" onclick="rejectCall()" title="Reject">✗</button>
+        `;
+            } else {
+                controlsEl.innerHTML = `
+            <button class="call-btn mute" onclick="toggleMute()" title="Mute">🔇</button>
+            <button class="call-btn end" onclick="endCall()" title="End Call">✗</button>
+        `;
+            }
+
+            console.log('Call UI shown successfully');
         }
 
         function hideCallUI() {
@@ -2249,22 +2688,31 @@
         }
 
         // Toast Notification
-        function showToast(title, message) {
+        function showToast(title, message, duration = 5000) {
+            const toastId = 'toast-' + Date.now();
             const toast = document.createElement('div');
             toast.className = 'toast';
+            toast.id = toastId;
             toast.innerHTML = `
-                <div class="toast-header">
-                    <span class="toast-title">${title}</span>
-                    <button class="toast-close" onclick="this.parentElement.parentElement.remove()">×</button>
-                </div>
-                <div class="toast-body">${escapeHtml(message)}</div>
-            `;
-            
+        <div class="toast-header">
+            <span class="toast-title">${title}</span>
+            <button class="toast-close" onclick="document.getElementById('${toastId}').remove()">×</button>
+        </div>
+        <div class="toast-body">${escapeHtml(message)}</div>
+    `;
+
             document.body.appendChild(toast);
-            
-            setTimeout(() => {
-                toast.remove();
-            }, 5000);
+
+            if (duration > 0) {
+                setTimeout(() => {
+                    const toastEl = document.getElementById(toastId);
+                    if (toastEl) {
+                        toastEl.remove();
+                    }
+                }, duration);
+            }
+
+            return toastId;
         }
 
         async function startChatWithUser(userId) {
