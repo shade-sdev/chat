@@ -1600,39 +1600,70 @@
         // Call Functions
         async function startCall() {
             if (!state.currentConversation) return;
-            
+            if (!checkWebRTCSupport()) {
+                return;
+            }
             try {
-                // Get user media
-                state.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                
+                console.log('Starting call, requesting microphone...');
+
+                // Get user media with better constraints
+                state.localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    },
+                    video: false
+                });
+
+                console.log('Got local stream, tracks:', state.localStream.getTracks());
+
+                // Create a local audio element to hear yourself (optional)
+                const localAudio = document.createElement('audio');
+                localAudio.id = 'local-audio';
+                localAudio.autoplay = true;
+                localAudio.muted = true; // Mute to avoid echo
+                localAudio.controls = false;
+                localAudio.style.display = 'none';
+                localAudio.srcObject = state.localStream;
+                document.body.appendChild(localAudio);
+
                 if (state.currentConversation.isDM) {
-                    // Start direct call
+                    console.log('Starting direct call');
                     const recipientId = state.currentConversation.otherUser.id;
                     const call = await apiRequest('/calls/initiate', {
                         method: 'POST',
                         body: JSON.stringify({ recipientId })
                     });
-                    
+
                     state.activeCall = call;
                     showCallUI('Calling...', state.currentConversation.otherUser.displayName);
-                    
-                    // Create offer
-                    await createOffer(call.id, recipientId);
+
+                    // Create offer with a small delay to ensure stream is ready
+                    setTimeout(() => {
+                        createOffer(call.id, recipientId);
+                    }, 500);
+
                 } else {
-                    // Start group call
+                    console.log('Starting group call');
                     const call = await apiRequest(`/groups/${state.currentConversation.id}/calls/start`, {
                         method: 'POST'
                     });
-                    
+
                     state.activeCall = call;
                     showCallUI('In Call', state.currentConversation.name);
                     startCallTimer();
                 }
             } catch (error) {
                 console.error('Error starting call:', error);
-                showToast('Error', 'Failed to start call. Please check microphone permissions.');
+                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                    showToast('Microphone Permission', 'Please allow microphone access to make calls');
+                } else {
+                    showToast('Error', 'Failed to start call: ' + error.message);
+                }
                 if (state.localStream) {
                     state.localStream.getTracks().forEach(track => track.stop());
+                    state.localStream = null;
                 }
             }
         }
@@ -1644,28 +1675,44 @@
 
         async function acceptCall() {
             if (!state.activeCall) return;
-            
+
             try {
+                console.log('Accepting call, requesting microphone...');
+
                 // Get user media
-                state.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                
+                state.localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    },
+                    video: false
+                });
+
+                console.log('Got local stream for accepting call');
+
                 await apiRequest(`/calls/${state.activeCall.id}/accept`, {
                     method: 'POST'
                 });
-                
+
                 // Create answer if this is a direct call
                 if (state.activeCall.type === 'DIRECT') {
-                    const otherUserId = state.activeCall.initiatorId === state.user.id 
-                        ? state.activeCall.recipientId 
+                    const otherUserId = state.activeCall.initiatorId === state.user.id
+                        ? state.activeCall.recipientId
                         : state.activeCall.initiatorId;
-                    await createAnswer(state.activeCall.id, otherUserId);
+                    console.log('Will create answer for:', otherUserId);
+                    // The answer will be created when we receive the offer
                 }
-                
+
                 showCallUI('In Call', getCallParticipantName());
                 startCallTimer();
             } catch (error) {
                 console.error('Error accepting call:', error);
-                showToast('Error', 'Failed to accept call');
+                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                    showToast('Microphone Permission', 'Please allow microphone access to answer calls');
+                } else {
+                    showToast('Error', 'Failed to accept call');
+                }
             }
         }
 
@@ -1681,6 +1728,24 @@
             } catch (error) {
                 console.error('Error rejecting call:', error);
             }
+        }
+
+        function showWebRTCDebug() {
+            const debugInfo = {
+                'Active Call': state.activeCall,
+                'Local Stream': state.localStream ? 'Yes' : 'No',
+                'Peer Connections': Object.keys(state.peerConnections).length,
+                'User ID': state.user?.id,
+                'WebSocket State': state.ws ? state.ws.readyState : 'Disconnected'
+            };
+
+            let debugText = 'WebRTC Debug Info:\n';
+            Object.entries(debugInfo).forEach(([key, value]) => {
+                debugText += `${key}: ${JSON.stringify(value)}\n`;
+            });
+
+            console.log(debugText);
+            showToast('Debug Info', debugText);
         }
 
         async function endCall() {
@@ -1751,129 +1816,334 @@
 
         // WebRTC Functions
         async function createOffer(callId, recipientId) {
-            const pc = new RTCPeerConnection({
-                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-            });
-            
-            state.peerConnections[recipientId] = pc;
-            
-            // Add local stream
-            state.localStream.getTracks().forEach(track => {
-                pc.addTrack(track, state.localStream);
-            });
-            
-            // Handle ICE candidates
-            pc.onicecandidate = (event) => {
-                if (event.candidate) {
-                    sendWebSocketMessage('ice_candidate', {
-                        callId,
-                        fromUserId: state.user.id,
-                        toUserId: recipientId,
-                        signal: JSON.stringify(event.candidate)
+            console.log('Creating offer for call:', callId, 'recipient:', recipientId);
+
+            try {
+                const pc = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' }
+                    ]
+                });
+
+                state.peerConnections[recipientId] = pc;
+
+                // Add local stream tracks
+                if (state.localStream) {
+                    console.log('Adding local stream tracks to peer connection');
+                    state.localStream.getTracks().forEach(track => {
+                        pc.addTrack(track, state.localStream);
                     });
                 }
-            };
-            
-            // Handle remote stream
-            pc.ontrack = (event) => {
-                const audio = new Audio();
-                audio.srcObject = event.streams[0];
-                audio.play();
-            };
-            
-            // Create and send offer
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            
-            sendWebSocketMessage('webrtc_offer', {
-                callId,
-                fromUserId: state.user.id,
-                toUserId: recipientId,
-                signal: JSON.stringify(offer)
-            });
+
+                // Handle ICE candidates
+                pc.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        console.log('Sending ICE candidate:', event.candidate);
+                        sendWebSocketMessage('ice_candidate', {
+                            callId,
+                            fromUserId: state.user.id,
+                            toUserId: recipientId,
+                            signal: JSON.stringify(event.candidate)
+                        });
+                    } else {
+                        console.log('All ICE candidates gathered');
+                    }
+                };
+
+                // Handle ICE connection state
+                pc.oniceconnectionstatechange = () => {
+                    console.log('ICE connection state:', pc.iceConnectionState);
+                };
+
+                // Handle remote stream
+                pc.ontrack = (event) => {
+                    console.log('Received remote track:', event.track.kind);
+                    const audio = document.createElement('audio');
+                    audio.id = `remote-audio-${recipientId}`;
+                    audio.autoplay = true;
+                    audio.controls = false;
+                    audio.style.display = 'none';
+                    audio.srcObject = event.streams[0];
+
+                    document.body.appendChild(audio);
+
+                    // Play the audio
+                    audio.play().catch(e => {
+                        console.error('Error playing remote audio:', e);
+                    });
+
+                    console.log('Remote stream added, tracks:', event.streams[0].getTracks());
+                };
+
+                // Create and send offer
+                console.log('Creating SDP offer...');
+                const offer = await pc.createOffer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: false
+                });
+
+                console.log('Setting local description...');
+                await pc.setLocalDescription(offer);
+
+                console.log('Sending offer:', offer);
+                sendWebSocketMessage('webrtc_offer', {
+                    callId,
+                    fromUserId: state.user.id,
+                    toUserId: recipientId,
+                    signal: JSON.stringify(offer)
+                });
+
+            } catch (error) {
+                console.error('Error creating offer:', error);
+                showToast('Error', 'Failed to create call offer');
+            }
         }
 
         async function createAnswer(callId, initiatorId) {
+            console.log('Creating answer for call:', callId, 'initiator:', initiatorId);
+
             const pc = new RTCPeerConnection({
-                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' }
+                ]
             });
-            
+
             state.peerConnections[initiatorId] = pc;
-            
+
             // Add local stream
-            state.localStream.getTracks().forEach(track => {
-                pc.addTrack(track, state.localStream);
-            });
-            
+            if (state.localStream) {
+                console.log('Adding local stream tracks to answer peer connection');
+                state.localStream.getTracks().forEach(track => {
+                    pc.addTrack(track, state.localStream);
+                });
+            }
+
             // Handle ICE candidates
             pc.onicecandidate = (event) => {
                 if (event.candidate) {
+                    console.log('Sending ICE candidate (answer side):', event.candidate);
                     sendWebSocketMessage('ice_candidate', {
                         callId,
                         fromUserId: state.user.id,
                         toUserId: initiatorId,
                         signal: JSON.stringify(event.candidate)
                     });
+                } else {
+                    console.log('All ICE candidates gathered (answer side)');
                 }
             };
-            
+
+            // Handle ICE connection state
+            pc.oniceconnectionstatechange = () => {
+                console.log('ICE connection state (answer):', pc.iceConnectionState);
+            };
+
             // Handle remote stream
             pc.ontrack = (event) => {
-                const audio = new Audio();
+                console.log('Received remote track (answer side):', event.track.kind);
+                const audio = document.createElement('audio');
+                audio.id = `remote-audio-${initiatorId}`;
+                audio.autoplay = true;
+                audio.controls = false;
+                audio.style.display = 'none';
                 audio.srcObject = event.streams[0];
-                audio.play();
+
+                document.body.appendChild(audio);
+
+                // Play the audio
+                audio.play().catch(e => {
+                    console.error('Error playing remote audio (answer):', e);
+                });
+
+                console.log('Remote stream added (answer), tracks:', event.streams[0].getTracks());
             };
+
+            // The actual answer will be created when we receive the offer
+            console.log('Answer peer connection created, waiting for offer...');
         }
 
         async function handleWebRTCSignal(message) {
-            // message is already the WebRTCSignal object
+            console.log('Processing WebRTC signal:', message.type);
+            console.log('Signal data:', message);
+
             const data = message;
 
-            if (data.toUserId !== state.user.id) return;
+            if (data.toUserId !== state.user.id) {
+                console.log('Signal not for this user, ignoring');
+                return;
+            }
 
-            const pc = state.peerConnections[data.fromUserId];
+            let pc = state.peerConnections[data.fromUserId];
 
-            if (message.type === 'webrtc_offer') {
-                // Create answer
-                const offer = JSON.parse(data.signal);
-                await pc.setRemoteDescription(new RTCSessionDescription(offer));
-
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-
-                sendWebSocketMessage('webrtc_answer', {
-                    callId: data.callId,
-                    fromUserId: state.user.id,
-                    toUserId: data.fromUserId,
-                    signal: JSON.stringify(answer)
+            // If we don't have a peer connection yet, create one (for answer)
+            if (!pc && message.type === 'webrtc_offer') {
+                console.log('No peer connection found, creating one for answer');
+                pc = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' }
+                    ]
                 });
-            } else if (message.type === 'webrtc_answer') {
-                const answer = JSON.parse(data.signal);
-                await pc.setRemoteDescription(new RTCSessionDescription(answer));
-            } else if (message.type === 'ice_candidate') {
-                const candidate = JSON.parse(data.signal);
-                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+
+                state.peerConnections[data.fromUserId] = pc;
+
+                // Add local stream if we have it
+                if (state.localStream) {
+                    console.log('Adding local stream to new peer connection');
+                    state.localStream.getTracks().forEach(track => {
+                        pc.addTrack(track, state.localStream);
+                    });
+                }
+
+                // Set up event handlers
+                pc.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        console.log('Sending ICE candidate from answer side');
+                        sendWebSocketMessage('ice_candidate', {
+                            callId: data.callId,
+                            fromUserId: state.user.id,
+                            toUserId: data.fromUserId,
+                            signal: JSON.stringify(event.candidate)
+                        });
+                    }
+                };
+
+                pc.ontrack = (event) => {
+                    console.log('Received remote track from offer:', event.track.kind);
+                    const audio = document.createElement('audio');
+                    audio.id = `remote-audio-${data.fromUserId}`;
+                    audio.autoplay = true;
+                    audio.controls = false;
+                    audio.style.display = 'none';
+                    audio.srcObject = event.streams[0];
+
+                    document.body.appendChild(audio);
+
+                    audio.play().catch(e => {
+                        console.error('Error playing remote audio from offer:', e);
+                    });
+                };
+
+                pc.oniceconnectionstatechange = () => {
+                    console.log('ICE connection state:', pc.iceConnectionState);
+                    if (pc.iceConnectionState === 'connected') {
+                        console.log('WebRTC connection established!');
+                        showToast('Call Connected', 'Audio should now be working');
+                    }
+                };
+            }
+
+            if (!pc) {
+                console.error('No peer connection available');
+                return;
+            }
+
+            try {
+                if (message.type === 'webrtc_offer') {
+                    console.log('Processing WebRTC offer');
+                    const offer = JSON.parse(data.signal);
+                    console.log('Offer SDP:', offer.sdp?.substring(0, 100) + '...');
+
+                    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+                    console.log('Remote description set');
+
+                    console.log('Creating answer...');
+                    const answer = await pc.createAnswer({
+                        offerToReceiveAudio: true,
+                        offerToReceiveVideo: false
+                    });
+
+                    console.log('Setting local description (answer)...');
+                    await pc.setLocalDescription(answer);
+                    console.log('Answer SDP:', answer.sdp?.substring(0, 100) + '...');
+
+                    sendWebSocketMessage('webrtc_answer', {
+                        callId: data.callId,
+                        fromUserId: state.user.id,
+                        toUserId: data.fromUserId,
+                        signal: JSON.stringify(answer)
+                    });
+                    console.log('Answer sent');
+
+                } else if (message.type === 'webrtc_answer') {
+                    console.log('Processing WebRTC answer');
+                    const answer = JSON.parse(data.signal);
+                    console.log('Answer SDP:', answer.sdp?.substring(0, 100) + '...');
+
+                    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                    console.log('Remote answer description set');
+
+                } else if (message.type === 'ice_candidate') {
+                    console.log('Processing ICE candidate');
+                    const candidate = JSON.parse(data.signal);
+
+                    if (candidate.candidate) {
+                        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                        console.log('ICE candidate added');
+                    } else {
+                        console.log('All ICE candidates received');
+                    }
+                }
+            } catch (error) {
+                console.error('Error processing WebRTC signal:', error);
+                showToast('WebRTC Error', error.message);
             }
         }
 
         function cleanupCall() {
+            console.log('Cleaning up call...');
+
             // Stop local stream
             if (state.localStream) {
-                state.localStream.getTracks().forEach(track => track.stop());
+                state.localStream.getTracks().forEach(track => {
+                    console.log('Stopping track:', track.kind);
+                    track.stop();
+                });
                 state.localStream = null;
             }
-            
+
             // Close peer connections
-            Object.values(state.peerConnections).forEach(pc => pc.close());
+            Object.entries(state.peerConnections).forEach(([userId, pc]) => {
+                console.log('Closing peer connection for user:', userId);
+                pc.close();
+            });
             state.peerConnections = {};
-            
+
+            // Remove audio elements
+            document.querySelectorAll('audio').forEach(audio => {
+                if (audio.id.startsWith('remote-audio-') || audio.id === 'local-audio') {
+                    console.log('Removing audio element:', audio.id);
+                    audio.remove();
+                }
+            });
+
             // Clear call timer
             if (state.callTimer) {
                 clearInterval(state.callTimer);
                 state.callTimer = null;
             }
-            
+
             state.activeCall = null;
+            console.log('Call cleanup complete');
+        }
+
+        function checkWebRTCSupport() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showToast('Browser Not Supported', 'WebRTC is not supported in your browser');
+                return false;
+            }
+
+            if (!RTCPeerConnection) {
+                showToast('Browser Not Supported', 'WebRTC Peer Connection not supported');
+                return false;
+            }
+
+            return true;
         }
 
         // Call UI Functions
@@ -1893,6 +2163,9 @@
                 controls.innerHTML = `
                     <button class="call-btn mute" onclick="toggleMute()" title="Mute">🔇</button>
                     <button class="call-btn end" onclick="endCall()" title="End Call">✗</button>
+                                    <button class="call-btn end" onclick="showWebRTCDebug()">
+                    Debug WebRTC
+                </button>
                 `;
             }
         }
