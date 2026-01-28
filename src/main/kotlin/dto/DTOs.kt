@@ -200,3 +200,8 @@ data class ParticipantUpdate(
     val action: String, // "joined", "left", "muted", "unmuted"
     val isMuted: Boolean? = null
 )
+
+@Serializable
+data class SimpleMessage(
+    val message: String
+)

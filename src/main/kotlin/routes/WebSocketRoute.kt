@@ -81,13 +81,7 @@ private suspend fun handleWebSocketMessage(
                 println("Parsed typing indicator: $indicator")
 
                 // Broadcast to relevant users
-                if (indicator.dmId != null) {
-                    // For DM typing - broadcast to everyone (in production, filter)
-                    wsManager.broadcast(indicator)
-                } else if (indicator.groupId != null) {
-                    // For group typing - broadcast to everyone (in production, filter)
-                    wsManager.broadcast(indicator)
-                }
+                wsManager.broadcast(indicator)
             }
 
             "webrtc_offer", "webrtc_answer", "ice_candidate" -> {
@@ -108,6 +102,12 @@ private suspend fun handleWebSocketMessage(
                 if (callId != null) {
                     callService.toggleMute(callId, userId, isMuted)
                 }
+            }
+
+            "ping" -> {
+                println("Received ping from client")
+                // Send pong back
+                wsManager.sendToUser(userId, "pong")
             }
 
             else -> {

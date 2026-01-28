@@ -1122,10 +1122,12 @@
                         handleParticipantUpdate(participantData);
                         break;
 
-                    case 'ping':
-                        console.log('Ping received:', message.data);
-                        // Send pong back
-                        sendWebSocketMessage('pong', { message: 'pong' });
+                    case 'pong':
+                        console.log('Pong received from server');
+                        break;
+
+                    case 'unknown':
+                        console.log('Unknown message from server:', message.data);
                         break;
 
                     default:

@@ -48,18 +48,23 @@ class WebSocketConnectionManager {
     }
 
     suspend fun broadcast(message: Any) {
-        val wsMessage = createWebSocketMessage(message)
-        val json = Json.encodeToString(wsMessage)
-        println("Broadcasting: $json")
+        try {
+            val wsMessage = createWebSocketMessage(message)
+            val json = Json.encodeToString(wsMessage)
+            println("Broadcasting: $json")
 
-        connections.values.forEach { session ->
-            if (!session.outgoing.isClosedForSend) {
-                try {
-                    session.send(Frame.Text(json))
-                } catch (e: Exception) {
-                    println("Error broadcasting message: ${e.message}")
+            connections.values.forEach { session ->
+                if (!session.outgoing.isClosedForSend) {
+                    try {
+                        session.send(Frame.Text(json))
+                    } catch (e: Exception) {
+                        println("Error broadcasting message: ${e.message}")
+                    }
                 }
             }
+        } catch (e: Exception) {
+            println("Error creating WebSocket message for broadcast: ${e.message}")
+            e.printStackTrace()
         }
     }
 
@@ -68,14 +73,29 @@ class WebSocketConnectionManager {
     }
 
     private fun createWebSocketMessage(message: Any): WSMessage {
-        val jsonData = Json.encodeToString(message)
         return when (message) {
-            is TypingIndicator -> WSMessage("typing_indicator", jsonData)
-            is NewMessageNotification -> WSMessage("new_message", jsonData)
-            is UserStatusUpdate -> WSMessage("user_status", jsonData)
-            is CallInitiatedNotification -> WSMessage("call_initiated", jsonData)
-            is CallStatusUpdate -> WSMessage("call_status", jsonData)
+            is TypingIndicator -> {
+                val jsonData = Json.encodeToString(message)
+                WSMessage("typing_indicator", jsonData)
+            }
+            is NewMessageNotification -> {
+                val jsonData = Json.encodeToString(message)
+                WSMessage("new_message", jsonData)
+            }
+            is UserStatusUpdate -> {
+                val jsonData = Json.encodeToString(message)
+                WSMessage("user_status", jsonData)
+            }
+            is CallInitiatedNotification -> {
+                val jsonData = Json.encodeToString(message)
+                WSMessage("call_initiated", jsonData)
+            }
+            is CallStatusUpdate -> {
+                val jsonData = Json.encodeToString(message)
+                WSMessage("call_status", jsonData)
+            }
             is WebRTCSignal -> {
+                val jsonData = Json.encodeToString(message)
                 val type = when {
                     message.signal.contains("\"type\":\"offer\"") -> "webrtc_offer"
                     message.signal.contains("\"type\":\"answer\"") -> "webrtc_answer"
@@ -83,10 +103,14 @@ class WebSocketConnectionManager {
                 }
                 WSMessage(type, jsonData)
             }
-            is ParticipantUpdate -> WSMessage("participant_update", jsonData)
+            is ParticipantUpdate -> {
+                val jsonData = Json.encodeToString(message)
+                WSMessage("participant_update", jsonData)
+            }
             else -> {
                 println("Unknown message type: ${message::class.simpleName}")
-                WSMessage("unknown", jsonData)
+                // Create a simple string message instead of trying to serialize Any
+                WSMessage("unknown", "\"${message.toString()}\"")
             }
         }
     }

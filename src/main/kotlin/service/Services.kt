@@ -40,7 +40,7 @@ class UserService(
         if (userRepository.findByUsername(username) != null) {
             return null
         }
-        
+
         val user = User(
             id = UUID.randomUUID().toString(),
             username = username,
@@ -48,17 +48,17 @@ class UserService(
             passwordHash = hashPassword(password),
             createdAt = Clock.System.now()
         )
-        
+
         return userRepository.save(user)
     }
-    
+
     suspend fun authenticate(username: String, password: String): User? {
         val user = userRepository.findByUsername(username) ?: return null
         return if (verifyPassword(password, user.passwordHash)) user else null
     }
-    
+
     suspend fun findById(id: String): User? = userRepository.findById(id)
-    
+
     suspend fun updateUser(id: String, displayName: String?, avatarUrl: String?): User? {
         return userRepository.update(id) { user ->
             user.copy(
@@ -67,18 +67,21 @@ class UserService(
             )
         }
     }
-    
+
     suspend fun updateStatus(userId: String, status: UserStatus) {
+        println("Updating status for user $userId to $status")
         userRepository.update(userId) { it.copy(status = status) }
-        
+
         // Broadcast status update
-        wsManager.broadcast(UserStatusUpdate(userId, status))
+        val statusUpdate = UserStatusUpdate(userId, status)
+        println("Broadcasting status update: $statusUpdate")
+        wsManager.broadcast(statusUpdate)
     }
-    
+
     suspend fun setCurrentCall(userId: String, callId: String?) {
         userRepository.update(userId) { it.copy(currentCallId = callId) }
     }
-    
+
     fun toResponse(user: User) = UserResponse(
         id = user.id,
         username = user.username,

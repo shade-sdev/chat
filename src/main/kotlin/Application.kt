@@ -1,5 +1,4 @@
 import auth.UserPrincipal
-import auth.hashPassword
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.http.*
@@ -17,9 +16,7 @@ import io.ktor.server.websocket.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock.System.now
 import kotlinx.serialization.json.Json
-import models.User
 import repository.*
 import routes.*
 import service.*
@@ -45,6 +42,9 @@ suspend fun Application.configureApp() {
     val messageRepository = MessageRepository()
     val dmRepository = DMRepository()
     val callRepository = CallRepository()
+
+    initTestData(userRepository, dmRepository)
+
 
     /* ---------------------------------------------------
      * WebSocket manager
@@ -88,6 +88,15 @@ suspend fun Application.configureApp() {
         allowMethod(HttpMethod.Put)
         allowMethod(HttpMethod.Delete)
         allowMethod(HttpMethod.Patch)
+
+        // Allow WebSocket headers
+        allowHeader("Sec-WebSocket-Key")
+        allowHeader("Sec-WebSocket-Version")
+        allowHeader("Sec-WebSocket-Extensions")
+        allowHeader("Sec-WebSocket-Protocol")
+
+        // Allow credentials for WebSocket
+        allowCredentials = true
     }
 
     install(WebSockets) {
@@ -145,29 +154,43 @@ suspend fun Application.configureApp() {
         websocketRoute(wsManager, userService, callService)
     }
 
+}
+
+suspend fun initTestData(userRepository: UserRepository, dmRepository: DMRepository) {
+    // Create test users if none exist
     if (userRepository.findAll().isEmpty()) {
-        val testUser1 = User(
+        println("Creating test users...")
+
+        val user1 = models.User(
             id = "user1",
             username = "alice",
             displayName = "Alice",
-            passwordHash = hashPassword("password"),
-            createdAt = now()
+            passwordHash = auth.hashPassword("password"),
+            createdAt = kotlinx.datetime.Clock.System.now()
         )
 
-        val testUser2 = User(
+        val user2 = models.User(
             id = "user2",
             username = "bob",
             displayName = "Bob",
-            passwordHash = hashPassword("password"),
-            createdAt = now()
+            passwordHash = auth.hashPassword("password"),
+            createdAt = kotlinx.datetime.Clock.System.now()
         )
 
-        userRepository.save(testUser1)
-        userRepository.save(testUser2)
+        userRepository.save(user1)
+        userRepository.save(user2)
 
-        // Create a test conversation
-        dmService.createOrGetConversation("user1", "user2")
+        // Create a test DM conversation
+        val dm = models.DirectMessageConversation(
+            id = "dm1",
+            participant1Id = "user1",
+            participant2Id = "user2",
+            createdAt = kotlinx.datetime.Clock.System.now()
+        )
+        dmRepository.save(dm)
 
-        println("Created test users: alice/password and bob/password")
+        println("Test users created:")
+        println("  alice / password")
+        println("  bob / password")
     }
 }
