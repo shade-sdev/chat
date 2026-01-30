@@ -10,9 +10,12 @@ import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 fun Route.websocketRoute(
     wsManager: WebSocketConnectionManager,
@@ -70,42 +73,88 @@ private suspend fun handleWebSocketMessage(
         println("From user: $userId")
         println("Raw text: $text")
 
-        // Parse the outer message
-        val outerMessage = Json.decodeFromString<WSMessage>(text)
-        println("Message type: ${outerMessage.type}")
+        // Parse as JSON object first to check structure
+        val json = Json.parseToJsonElement(text).jsonObject
+        val type = json["type"]?.jsonPrimitive?.content
 
-        when (outerMessage.type) {
+        if (type == null) {
+            println("No type field in message")
+            return
+        }
+
+        println("Message type: $type")
+
+        when (type) {
+            "ping" -> {
+                println("Received ping from client")
+                // Send pong back
+                val pongMessage = mapOf("type" to "pong")
+                val jsonResponse = Json.encodeToString(pongMessage)
+                wsManager.getConnection(userId)?.send(Frame.Text(jsonResponse))
+            }
+
             "typing_indicator" -> {
-                val indicator = Json.decodeFromString<TypingIndicator>(outerMessage.data)
+                val data = json["data"]?.toString() ?: return
+                val indicator = Json.decodeFromString<TypingIndicator>(data)
                 println("Typing indicator: $indicator")
                 wsManager.broadcast(indicator)
             }
 
-            "webrtc_offer", "webrtc_answer", "ice_candidate" -> {
-                // CRITICAL FIX: Parse the signal and forward it WITHOUT re-wrapping
-                val signal = Json.decodeFromString<WebRTCSignal>(outerMessage.data)
-                println("=== WebRTC Signal ===")
-                println("Type: ${outerMessage.type}")
-                println("From: ${signal.fromUserId}")
-                println("To: ${signal.toUserId}")
-                println("Call ID: ${signal.callId}")
-                println("Signal (first 100 chars): ${signal.signal.take(100)}")
-                
-                // FIXED: Send the ORIGINAL message type and data directly
-                // This avoids the triple-encoding issue
-                wsManager.sendToUserDirect(
-                    userId = signal.toUserId,
-                    type = outerMessage.type,
-                    data = outerMessage.data
-                )
-                
-                println("Signal forwarded to ${signal.toUserId}")
+            "webrtc_offer", "webrtc_answer", "ice_candidate", "call_ended" -> {
+                val data = json["data"]?.toString() ?: return
+                println("Forwarding WebRTC signal type: $type")
+
+                try {
+                    // Try to parse as WebRTCSignal
+                    val signal = Json.decodeFromString<WebRTCSignal>(data)
+
+                    // Extract recipientId from signal
+                    val recipientId = signal.toUserId
+
+                    if (recipientId == null) {
+                        println("Error: No recipientId in WebRTC signal")
+                        return
+                    }
+
+                    println("From ${signal.fromUserId} to $recipientId")
+
+                    // Send directly to target user using the new method
+                    wsManager.sendToUserDirect(
+                        userId = recipientId,
+                        type = type,
+                        data = data  // Pass the original signal data
+                    )
+                } catch (e: Exception) {
+                    println("Error parsing WebRTCSignal: ${e.message}")
+                    // Try alternative parsing
+                    try {
+                        val dataObj = Json.parseToJsonElement(data).jsonObject
+                        val recipientId = dataObj["toUserId"]?.jsonPrimitive?.content ?:
+                        dataObj["recipientId"]?.jsonPrimitive?.content
+                        val fromUserId = dataObj["fromUserId"]?.jsonPrimitive?.content ?: userId
+
+                        if (recipientId != null) {
+                            println("Alternative parsing: From $fromUserId to $recipientId")
+
+                            wsManager.sendToUserDirect(
+                                userId = recipientId,
+                                type = type,
+                                data = data
+                            )
+                        } else {
+                            println("Error: Could not extract recipientId from signal data")
+                        }
+                    } catch (e2: Exception) {
+                        println("Failed alternative parsing: ${e2.message}")
+                    }
+                }
             }
 
             "mute_toggle" -> {
-                val data = Json.parseToJsonElement(outerMessage.data).jsonObject
-                val callId = data["callId"]?.toString()?.removeSurrounding("\"")
-                val isMuted = data["isMuted"]?.toString()?.toBoolean() ?: false
+                val data = json["data"]?.toString() ?: return
+                val dataJson = Json.parseToJsonElement(data).jsonObject
+                val callId = dataJson["callId"]?.jsonPrimitive?.content
+                val isMuted = dataJson["isMuted"]?.jsonPrimitive?.boolean ?: false
 
                 println("Mute toggle: callId=$callId, isMuted=$isMuted")
 
@@ -114,13 +163,15 @@ private suspend fun handleWebSocketMessage(
                 }
             }
 
-            "ping" -> {
-                println("Received ping from client")
-                wsManager.sendToUser(userId, "pong")
-            }
-
             else -> {
-                println("Unknown WebSocket message type: ${outerMessage.type}")
+                println("Unknown WebSocket message type: $type")
+                // Try to parse as WSMessage for other types
+                try {
+                    val outerMessage = Json.decodeFromString<WSMessage>(text)
+                    println("Parsed as WSMessage with data: ${outerMessage.data}")
+                } catch (e: Exception) {
+                    println("Cannot parse as WSMessage: ${e.message}")
+                }
             }
         }
         println("=== End of message processing ===\n")
@@ -132,3 +183,4 @@ private suspend fun handleWebSocketMessage(
         println("=== End error ===")
     }
 }
+

@@ -2,6 +2,7 @@ package websocket
 
 import dto.*
 import io.ktor.websocket.*
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.util.concurrent.ConcurrentHashMap
@@ -25,17 +26,18 @@ class WebSocketConnectionManager {
         return connections.containsKey(userId)
     }
 
-    /**
-     * CRITICAL FIX: New method to send WebRTC signals directly without re-wrapping
-     * This prevents the triple-encoding issue that was breaking WebRTC
-     */
+    @OptIn(DelicateCoroutinesApi::class)
     suspend fun sendToUserDirect(userId: String, type: String, data: String) {
         val session = connections[userId]
         if (session != null && !session.outgoing.isClosedForSend) {
             try {
-                val wsMessage = WSMessage(type, data)
+                // Create WebSocket message with type and data
+                val wsMessage = mapOf(
+                    "type" to type,
+                    "data" to data
+                )
                 val json = Json.encodeToString(wsMessage)
-                println("Sending direct to user $userId (type: $type)")
+                println("Sending direct to user $userId (type: $type, data length: ${data.length})")
                 session.send(Frame.Text(json))
             } catch (e: Exception) {
                 println("Error sending direct message to user $userId: ${e.message}")
@@ -123,8 +125,8 @@ class WebSocketConnectionManager {
                 println("WARNING: WebRTCSignal sent through createWebSocketMessage - use sendToUserDirect instead!")
                 val jsonData = Json.encodeToString(message)
                 val type = when {
-                    message.signal.contains("\"type\":\"offer\"") -> "webrtc_offer"
-                    message.signal.contains("\"type\":\"answer\"") -> "webrtc_answer"
+                    message.signal?.contains("\"type\":\"offer\"") ?: false -> "webrtc_offer"
+                    message.signal?.contains("\"type\":\"answer\"") ?: false -> "webrtc_answer"
                     else -> "ice_candidate"
                 }
                 WSMessage(type, jsonData)

@@ -186,10 +186,14 @@ data class CallStatusUpdate(
 
 @Serializable
 data class WebRTCSignal(
-    val callId: String,
-    val fromUserId: String,
-    val toUserId: String,
-    val signal: String // JSON stringified SDP or ICE candidate
+    val callId: String? = null,
+    val fromUserId: String? = null,
+    val toUserId: String? = null,
+    val signal: String? = null, // JSON stringified SDP or ICE candidate
+    val offer: String? = null,
+    val answer: String? = null,
+    val candidate: String? = null,
+    val ended: Boolean? = null  // For call_ended
 )
 
 @Serializable
