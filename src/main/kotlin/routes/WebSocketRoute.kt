@@ -13,6 +13,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -94,72 +95,89 @@ private suspend fun handleWebSocketMessage(
             }
 
             "typing_indicator" -> {
-                val data = json["data"]?.toString() ?: return
-                val indicator = Json.decodeFromString<TypingIndicator>(data)
-                println("Typing indicator: $indicator")
-                wsManager.broadcast(indicator)
+                val dataElement = json["data"] ?: return
+                
+                try {
+                    // Convert to string first
+                    val dataString = if (dataElement is JsonPrimitive) {
+                        dataElement.content
+                    } else {
+                        dataElement.toString()
+                    }
+                    
+                    val indicator = Json.decodeFromString<TypingIndicator>(dataString)
+                    println("Typing indicator: $indicator")
+                    wsManager.broadcast(indicator)
+                } catch (e: Exception) {
+                    println("Error parsing typing_indicator: ${e.message}")
+                    e.printStackTrace()
+                }
             }
 
             "webrtc_offer", "webrtc_answer", "ice_candidate", "call_ended" -> {
-                val data = json["data"]?.toString() ?: return
+                // Get the data field - it might be a string or already an object
+                val dataElement = json["data"] ?: return
                 println("Forwarding WebRTC signal type: $type")
 
                 try {
-                    // Try to parse as WebRTCSignal
-                    val signal = Json.decodeFromString<WebRTCSignal>(data)
-
-                    // Extract recipientId from signal
-                    val recipientId = signal.toUserId
+                    // Convert to string first, then parse as JSON
+                    val dataString = if (dataElement is kotlinx.serialization.json.JsonPrimitive) {
+                        dataElement.content
+                    } else {
+                        dataElement.toString()
+                    }
+                    
+                    println("Data string: $dataString")
+                    
+                    // Parse the data to extract recipient
+                    val dataObj = Json.parseToJsonElement(dataString).jsonObject
+                    val recipientId = dataObj["toUserId"]?.jsonPrimitive?.content
+                    val fromUserId = dataObj["fromUserId"]?.jsonPrimitive?.content ?: userId
 
                     if (recipientId == null) {
                         println("Error: No recipientId in WebRTC signal")
                         return
                     }
 
-                    println("From ${signal.fromUserId} to $recipientId")
+                    println("Forwarding $type from $fromUserId to $recipientId")
 
-                    // Send directly to target user using the new method
+                    // Send directly to target user with the original data string
                     wsManager.sendToUserDirect(
                         userId = recipientId,
                         type = type,
-                        data = data  // Pass the original signal data
+                        data = dataString
                     )
+
+                    println("Signal forwarded successfully")
                 } catch (e: Exception) {
-                    println("Error parsing WebRTCSignal: ${e.message}")
-                    // Try alternative parsing
-                    try {
-                        val dataObj = Json.parseToJsonElement(data).jsonObject
-                        val recipientId = dataObj["toUserId"]?.jsonPrimitive?.content ?:
-                        dataObj["recipientId"]?.jsonPrimitive?.content
-                        val fromUserId = dataObj["fromUserId"]?.jsonPrimitive?.content ?: userId
-
-                        if (recipientId != null) {
-                            println("Alternative parsing: From $fromUserId to $recipientId")
-
-                            wsManager.sendToUserDirect(
-                                userId = recipientId,
-                                type = type,
-                                data = data
-                            )
-                        } else {
-                            println("Error: Could not extract recipientId from signal data")
-                        }
-                    } catch (e2: Exception) {
-                        println("Failed alternative parsing: ${e2.message}")
-                    }
+                    println("Error parsing/forwarding WebRTC signal: ${e.message}")
+                    e.printStackTrace()
                 }
             }
 
             "mute_toggle" -> {
-                val data = json["data"]?.toString() ?: return
-                val dataJson = Json.parseToJsonElement(data).jsonObject
-                val callId = dataJson["callId"]?.jsonPrimitive?.content
-                val isMuted = dataJson["isMuted"]?.jsonPrimitive?.boolean ?: false
+                val dataElement = json["data"] ?: return
+                
+                try {
+                    // Convert to string first, then parse as JSON
+                    val dataString = if (dataElement is JsonPrimitive) {
+                        dataElement.content
+                    } else {
+                        dataElement.toString()
+                    }
+                    
+                    val dataJson = Json.parseToJsonElement(dataString).jsonObject
+                    val callId = dataJson["callId"]?.jsonPrimitive?.content
+                    val isMuted = dataJson["isMuted"]?.jsonPrimitive?.boolean ?: false
 
-                println("Mute toggle: callId=$callId, isMuted=$isMuted")
+                    println("Mute toggle: callId=$callId, isMuted=$isMuted")
 
-                if (callId != null) {
-                    callService.toggleMute(callId, userId, isMuted)
+                    if (callId != null) {
+                        callService.toggleMute(callId, userId, isMuted)
+                    }
+                } catch (e: Exception) {
+                    println("Error parsing mute_toggle: ${e.message}")
+                    e.printStackTrace()
                 }
             }
 

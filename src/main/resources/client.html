@@ -286,7 +286,7 @@
         }
 
         .message.sent {
-            align-self: flex-end;
+            margin-left: auto;
             flex-direction: row-reverse;
         }
 
@@ -298,29 +298,27 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
-            font-weight: bold;
             color: white;
+            font-weight: bold;
+            font-size: 14px;
             flex-shrink: 0;
         }
 
         .message-content {
+            flex: 1;
+        }
+
+        .message-header {
             display: flex;
-            flex-direction: column;
-            gap: 4px;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
         }
 
-        .message-bubble {
-            background: white;
-            padding: 12px 16px;
-            border-radius: 18px;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-            word-wrap: break-word;
-        }
-
-        .message.sent .message-bubble {
-            background: #667eea;
-            color: white;
+        .message-sender {
+            font-weight: 600;
+            font-size: 13px;
+            color: #2c3e50;
         }
 
         .message-time {
@@ -328,7 +326,22 @@
             color: #95a5a6;
         }
 
-        /* Input */
+        .message-bubble {
+            background: white;
+            padding: 10px 14px;
+            border-radius: 12px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            word-wrap: break-word;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .message.sent .message-bubble {
+            background: #667eea;
+            color: white;
+        }
+
+        /* Message Input */
         .message-input-container {
             padding: 20px;
             background: white;
@@ -347,28 +360,26 @@
             border: 2px solid #e0e0e0;
             border-radius: 24px;
             font-size: 14px;
-            resize: none;
-            font-family: inherit;
+            outline: none;
             transition: border-color 0.3s;
         }
 
         .message-input:focus {
-            outline: none;
             border-color: #667eea;
         }
 
         .send-btn {
-            width: 48px;
-            height: 48px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
             background: #667eea;
             color: white;
             border: none;
-            border-radius: 50%;
             cursor: pointer;
-            font-size: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
+            font-size: 18px;
             transition: background 0.3s;
         }
 
@@ -376,86 +387,18 @@
             background: #5568d3;
         }
 
-        /* Online Users */
-        .online-users-section {
-            padding: 16px 20px;
-            border-top: 1px solid #34495e;
-        }
-
-        .online-users-section h4 {
-            color: #95a5a6;
-            font-size: 12px;
-            margin-bottom: 12px;
-            text-transform: uppercase;
-        }
-
-        .online-user-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 12px;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        .online-user-item:hover {
-            background: #34495e;
-        }
-
-        .online-user-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: #667eea;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: bold;
-            color: white;
-        }
-
-        .online-user-name {
-            font-size: 13px;
-            font-weight: 500;
-        }
-
-        .online-user-status {
-            font-size: 11px;
-            color: #95a5a6;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .status-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #27ae60;
-        }
-
-        .status-dot.away {
-            background: #f39c12;
-        }
-
-        .status-dot.in-call {
-            background: #e74c3c;
-        }
-
-        /* Call UI */
+        /* Call Overlay */
         .call-overlay {
+            display: none;
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
             background: rgba(0, 0, 0, 0.9);
-            z-index: 1000;
+            z-index: 9999;
             align-items: center;
             justify-content: center;
-            display: none;
         }
 
         .call-overlay.active {
@@ -463,30 +406,37 @@
         }
 
         .call-container {
-            background: #2c3e50;
-            border-radius: 16px;
-            padding: 40px;
             text-align: center;
             color: white;
-            min-width: 400px;
-            max-width: 600px;
         }
 
-        .call-status {
-            font-size: 24px;
-            font-weight: 600;
-            margin-bottom: 8px;
+        .call-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: #667eea;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            margin: 0 auto 24px;
         }
 
         .call-participant {
-            font-size: 16px;
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .call-status {
+            font-size: 18px;
             color: #95a5a6;
-            margin-bottom: 24px;
+            margin-bottom: 8px;
         }
 
         .call-timer {
-            font-size: 18px;
-            color: #95a5a6;
+            font-size: 16px;
+            color: #7f8c8d;
             margin-bottom: 32px;
         }
 
@@ -494,7 +444,6 @@
             display: flex;
             gap: 16px;
             justify-content: center;
-            margin-bottom: 24px;
         }
 
         .call-btn {
@@ -504,14 +453,10 @@
             border: none;
             cursor: pointer;
             font-size: 24px;
-            transition: transform 0.2s, background 0.3s;
+            transition: all 0.3s;
             display: flex;
             align-items: center;
             justify-content: center;
-        }
-
-        .call-btn:hover {
-            transform: scale(1.1);
         }
 
         .call-btn.accept {
@@ -519,55 +464,69 @@
             color: white;
         }
 
-        .call-btn.reject {
+        .call-btn.accept:hover {
+            background: #229954;
+        }
+
+        .call-btn.reject, .call-btn.end {
             background: #e74c3c;
             color: white;
         }
 
-        .call-btn.end {
-            background: #e74c3c;
-            color: white;
+        .call-btn.reject:hover, .call-btn.end:hover {
+            background: #c0392b;
         }
 
         .call-btn.mute {
-            background: #34495e;
+            background: #3498db;
             color: white;
         }
 
-        .call-btn.mute.active {
-            background: #e74c3c;
+        .call-btn.mute:hover {
+            background: #2980b9;
         }
 
-        /* Toast */
+        .call-btn.mute.muted {
+            background: #95a5a6;
+        }
+
+        /* Toast notifications */
         .toast {
             position: fixed;
             top: 20px;
             right: 20px;
             background: white;
-            padding: 16px 20px;
+            padding: 16px 24px;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            z-index: 2000;
+            z-index: 10000;
             animation: slideInRight 0.3s ease-out;
-            max-width: 320px;
+            min-width: 300px;
         }
 
         @keyframes slideInRight {
             from {
-                transform: translateX(400px);
                 opacity: 0;
+                transform: translateX(100px);
             }
             to {
-                transform: translateX(0);
                 opacity: 1;
+                transform: translateX(0);
             }
         }
 
-        /* Utility */
-        .hidden {
-            display: none !important;
+        .toast-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #2c3e50;
         }
 
+        .toast-body {
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+
+        /* Empty state */
         .empty-state {
             flex: 1;
             display: flex;
@@ -577,29 +536,18 @@
             color: #95a5a6;
         }
 
-        .empty-state h3 {
-            font-size: 24px;
-            margin-bottom: 8px;
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
         }
 
-        .empty-state p {
-            font-size: 14px;
+        .empty-state-text {
+            font-size: 18px;
         }
 
-        .new-conversation-btn {
-            margin: 16px;
-            padding: 12px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        .new-conversation-btn:hover {
-            background: #5568d3;
+        /* Audio elements (hidden) */
+        .audio-container {
+            display: none;
         }
     </style>
 </head>
@@ -607,84 +555,77 @@
 <!-- Auth Container -->
 <div id="authContainer" class="auth-container">
     <div class="auth-box">
-        <h2 id="authTitle">Login to Chat</h2>
-        <div id="authError" class="error-message"></div>
+        <h2 id="authTitle">Login</h2>
+        <div id="errorMessage" class="error-message"></div>
+
         <div id="loginForm">
             <input type="text" id="loginUsername" placeholder="Username" />
             <input type="password" id="loginPassword" placeholder="Password" />
             <button onclick="login()">Login</button>
-            <div class="toggle-link" onclick="toggleAuthMode()">Need an account? Register</div>
+            <div class="toggle-link" onclick="toggleAuthForm()">Don't have an account? Register</div>
         </div>
-        <div id="registerForm" class="hidden">
+
+        <div id="registerForm" style="display: none;">
             <input type="text" id="registerUsername" placeholder="Username" />
             <input type="password" id="registerPassword" placeholder="Password" />
             <input type="text" id="registerDisplayName" placeholder="Display Name" />
             <button onclick="register()">Register</button>
-            <div class="toggle-link" onclick="toggleAuthMode()">Already have an account? Login</div>
+            <div class="toggle-link" onclick="toggleAuthForm()">Already have an account? Login</div>
         </div>
     </div>
 </div>
 
-<!-- App Container -->
+<!-- Main App Container -->
 <div id="appContainer" class="app-container">
     <!-- Sidebar -->
     <div class="sidebar">
         <div class="sidebar-header">
             <div class="user-profile">
-                <div class="user-avatar" id="userAvatar"></div>
+                <div class="user-avatar" id="userAvatar">A</div>
                 <div class="user-info">
-                    <h3 id="userName"></h3>
+                    <h3 id="userName">Loading...</h3>
                     <div class="user-status">
-                        <div class="status-indicator"></div>
+                        <span class="status-indicator"></span>
                         <span>Online</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <button class="new-conversation-btn" onclick="showNewConversationModal()">
-            + New Conversation
-        </button>
-
-        <div id="conversationList" class="conversation-list"></div>
-
-        <div class="online-users-section">
-            <h4>Online Users</h4>
-            <div id="onlineUsersList"></div>
+        <div class="conversation-list" id="conversationList">
+            <!-- Conversations will be rendered here -->
         </div>
     </div>
 
     <!-- Chat Area -->
     <div class="chat-area">
-        <div id="emptyState" class="empty-state">
-            <h3>Welcome to Chat!</h3>
-            <p>Select a conversation to start messaging</p>
+        <div id="chatHeader" class="chat-header" style="display: none;">
+            <div class="chat-header-info">
+                <h2 id="chatName">Select a conversation</h2>
+                <div class="chat-header-status" id="chatStatus">Offline</div>
+            </div>
+            <div class="chat-header-actions">
+                <button class="header-btn" onclick="startCall()">📞 Call</button>
+            </div>
         </div>
 
-        <div id="chatView" class="hidden" style="display: flex; flex-direction: column; height: 100%;">
-            <div class="chat-header">
-                <div class="chat-header-info">
-                    <h2 id="chatHeaderName"></h2>
-                    <div class="chat-header-status" id="chatHeaderStatus"></div>
-                </div>
-                <div class="chat-header-actions">
-                    <button class="header-btn" onclick="startCall()">📞 Call</button>
-                </div>
+        <div id="messagesContainer" class="messages-container">
+            <div class="empty-state">
+                <div class="empty-state-icon">💬</div>
+                <div class="empty-state-text">Select a conversation to start chatting</div>
             </div>
+        </div>
 
-            <div class="messages-container" id="messagesContainer"></div>
-
-            <div class="message-input-container">
-                <div class="message-input-wrapper">
-                        <textarea
-                                id="messageInput"
-                                class="message-input"
-                                placeholder="Type a message..."
-                                rows="1"
-                                onkeydown="handleMessageKeydown(event)"
-                        ></textarea>
-                    <button class="send-btn" onclick="sendMessage()">➤</button>
-                </div>
+        <div id="messageInputContainer" class="message-input-container" style="display: none;">
+            <div class="message-input-wrapper">
+                <input
+                        type="text"
+                        id="messageInput"
+                        class="message-input"
+                        placeholder="Type a message..."
+                        onkeypress="handleMessageKeyPress(event)"
+                />
+                <button class="send-btn" onclick="sendMessage()">➤</button>
             </div>
         </div>
     </div>
@@ -693,69 +634,85 @@
 <!-- Call Overlay -->
 <div id="callOverlay" class="call-overlay">
     <div class="call-container">
-        <div class="call-status" id="callStatus">Incoming Call</div>
-        <div class="call-participant" id="callParticipant"></div>
+        <div class="call-avatar" id="callAvatar">👤</div>
+        <div class="call-participant" id="callParticipant">Unknown</div>
+        <div class="call-status" id="callStatus">Calling...</div>
         <div class="call-timer" id="callTimer">00:00</div>
-        <div class="call-controls" id="callControls"></div>
-    </div>
-</div>
-
-<!-- New Conversation Modal -->
-<div id="newConversationModal" class="modal hidden">
-    <div class="modal-content">
-        <div class="modal-header">New Conversation</div>
-        <input type="text" id="recipientUserId" class="modal-input" placeholder="Enter User ID" />
-        <div class="modal-actions">
-            <button class="modal-btn secondary" onclick="closeModal()">Cancel</button>
-            <button class="modal-btn primary" onclick="createConversation()">Create</button>
+        <div class="call-controls" id="callControls">
+            <!-- Buttons will be dynamically added -->
         </div>
     </div>
 </div>
 
+<!-- Hidden audio elements for remote audio streams -->
+<div class="audio-container">
+    <audio id="remoteAudio" autoplay></audio>
+    <audio id="localAudio" muted></audio>
+</div>
+
 <script>
     // ==================== CONFIGURATION ====================
-    const API_BASE = '';  // Same origin
-    const WS_BASE = window.location.origin.replace('http', 'ws');
+    const API_BASE = 'http://192.168.100.110:8080';
+    const WS_BASE = 'ws://192.168.100.110:8080';
 
-    // ==================== APPLICATION STATE ====================
+    // ==================== STATE ====================
     const state = {
+        token: localStorage.getItem('token'),
         user: null,
-        token: null,
         ws: null,
-        currentConversation: null,
         conversations: [],
-        messages: {},
+        currentConversation: null,
+        messages: new Map(),
+        onlineUsers: new Set(),
         activeCall: null,
-        typingTimeout: null,
-        onlineUsers: {}
+        callTimer: null,
+        // WebRTC
+        peerConnection: null,
+        localStream: null,
+        isMuted: false,
+        isInitiator: false,
+        pendingIceCandidates: []
+    };
+
+    // ==================== WEBRTC CONFIGURATION ====================
+    const rtcConfig = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+        ]
     };
 
     // ==================== INITIALIZATION ====================
-    window.onload = function() {
-        const token = localStorage.getItem('token');
-        if (token) {
-            state.token = token;
-            loadUserData();
+    async function init() {
+        if (state.token) {
+            try {
+                await fetchCurrentUser();
+                await connectWebSocket();
+                await loadConversations();
+                showApp();
+            } catch (error) {
+                console.error('Initialization error:', error);
+                logout();
+            }
         }
-    };
+    }
 
     // ==================== AUTH FUNCTIONS ====================
-    function toggleAuthMode() {
+    function toggleAuthForm() {
         const loginForm = document.getElementById('loginForm');
         const registerForm = document.getElementById('registerForm');
-        const title = document.getElementById('authTitle');
+        const authTitle = document.getElementById('authTitle');
 
-        if (loginForm.classList.contains('hidden')) {
-            loginForm.classList.remove('hidden');
-            registerForm.classList.add('hidden');
-            title.textContent = 'Login to Chat';
+        if (loginForm.style.display === 'none') {
+            loginForm.style.display = 'block';
+            registerForm.style.display = 'none';
+            authTitle.textContent = 'Login';
         } else {
-            loginForm.classList.add('hidden');
-            registerForm.classList.remove('hidden');
-            title.textContent = 'Register for Chat';
+            loginForm.style.display = 'none';
+            registerForm.style.display = 'block';
+            authTitle.textContent = 'Register';
         }
-
-        document.getElementById('authError').style.display = 'none';
+        hideError();
     }
 
     async function login() {
@@ -763,7 +720,7 @@
         const password = document.getElementById('loginPassword').value;
 
         if (!username || !password) {
-            showAuthError('Please fill in all fields');
+            showError('Please fill in all fields');
             return;
         }
 
@@ -774,20 +731,21 @@
                 body: JSON.stringify({ username, password })
             });
 
-            if (!response.ok) {
-                const error = await response.json();
-                showAuthError(error.error || 'Login failed');
-                return;
-            }
-
             const data = await response.json();
-            state.token = data.token;
-            state.user = data.user;
-            localStorage.setItem('token', data.token);
 
-            initializeApp();
+            if (response.ok) {
+                state.token = data.token;
+                state.user = data.user;
+                localStorage.setItem('token', data.token);
+                await connectWebSocket();
+                await loadConversations();
+                showApp();
+            } else {
+                showError(data.error || 'Login failed');
+            }
         } catch (error) {
-            showAuthError('Network error. Please try again.');
+            showError('Connection error');
+            console.error('Login error:', error);
         }
     }
 
@@ -797,7 +755,7 @@
         const displayName = document.getElementById('registerDisplayName').value;
 
         if (!username || !password || !displayName) {
-            showAuthError('Please fill in all fields');
+            showError('Please fill in all fields');
             return;
         }
 
@@ -808,221 +766,88 @@
                 body: JSON.stringify({ username, password, displayName })
             });
 
-            if (!response.ok) {
-                const error = await response.json();
-                showAuthError(error.error || 'Registration failed');
-                return;
-            }
-
             const data = await response.json();
-            state.token = data.token;
-            state.user = data.user;
-            localStorage.setItem('token', data.token);
 
-            initializeApp();
+            if (response.ok) {
+                state.token = data.token;
+                state.user = data.user;
+                localStorage.setItem('token', data.token);
+                await connectWebSocket();
+                await loadConversations();
+                showApp();
+            } else {
+                showError(data.error || 'Registration failed');
+            }
         } catch (error) {
-            showAuthError('Network error. Please try again.');
+            showError('Connection error');
+            console.error('Registration error:', error);
         }
     }
 
-    function showAuthError(message) {
-        const errorEl = document.getElementById('authError');
+    function logout() {
+        if (state.ws) {
+            state.ws.close();
+        }
+        if (state.peerConnection) {
+            state.peerConnection.close();
+        }
+        if (state.localStream) {
+            state.localStream.getTracks().forEach(track => track.stop());
+        }
+        localStorage.removeItem('token');
+        state.token = null;
+        state.user = null;
+        location.reload();
+    }
+
+    function showError(message) {
+        const errorEl = document.getElementById('errorMessage');
         errorEl.textContent = message;
         errorEl.style.display = 'block';
     }
 
-    async function loadUserData() {
-        try {
-            const response = await fetch(`${API_BASE}/users/me`, {
-                headers: { 'Authorization': `Bearer ${state.token}` }
-            });
-
-            if (!response.ok) {
-                localStorage.removeItem('token');
-                return;
-            }
-
-            state.user = await response.json();
-            initializeApp();
-        } catch (error) {
-            localStorage.removeItem('token');
-        }
+    function hideError() {
+        document.getElementById('errorMessage').style.display = 'none';
     }
 
-    // ==================== MAIN APP INITIALIZATION ====================
-    function initializeApp() {
+    function showApp() {
         document.getElementById('authContainer').style.display = 'none';
         document.getElementById('appContainer').classList.add('active');
 
-        // Set user info
-        document.getElementById('userName').textContent = state.user.displayName;
-        document.getElementById('userAvatar').textContent = state.user.displayName[0].toUpperCase();
-
-        // Initialize WebSocket
-        connectWebSocket();
-
-        // Load conversations and users
-        loadConversations();
-        fetchAllUsers();
-
-        // Refresh user status every 30 seconds
-        setInterval(fetchAllUsers, 30000);
-    }
-
-    // ==================== WEBSOCKET FUNCTIONS ====================
-    function connectWebSocket() {
-        const wsUrl = `${WS_BASE}/ws?token=${state.token}`;
-        console.log('Connecting to WebSocket:', wsUrl);
-        state.ws = new WebSocket(wsUrl);
-
-        state.ws.onopen = () => {
-            console.log('WebSocket connected');
-            // Send ping to keep connection alive
-            setInterval(() => {
-                if (state.ws.readyState === WebSocket.OPEN) {
-                    state.ws.send(JSON.stringify({ type: 'ping' }));
-                }
-            }, 30000);
-        };
-
-        state.ws.onmessage = (event) => {
-            try {
-                console.log('Raw WebSocket message:', event.data);
-
-                // Parse the message according to backend format
-                const parsed = JSON.parse(event.data);
-                console.log('Parsed message:', parsed);
-
-                // The backend sends {type: "...", data: "..."} format
-                // where data is a JSON string that needs to be parsed
-                if (parsed.type && parsed.data) {
-                    try {
-                        const data = JSON.parse(parsed.data);
-                        const message = {
-                            type: parsed.type,
-                            ...data
-                        };
-                        console.log('Final message object:', message);
-                        handleWebSocketMessage(message);
-                    } catch (innerError) {
-                        // If data is not JSON, handle it as-is
-                        console.log('Data is not JSON, using as string:', parsed.data);
-                        const message = {
-                            type: parsed.type,
-                            data: parsed.data
-                        };
-                        handleWebSocketMessage(message);
-                    }
-                } else {
-                    // Handle messages without the nested structure
-                    handleWebSocketMessage(parsed);
-                }
-            } catch (error) {
-                console.error('WebSocket parse error:', error);
-            }
-        };
-
-        state.ws.onclose = (event) => {
-            console.log('WebSocket disconnected, reconnecting...');
-            setTimeout(connectWebSocket, 3000);
-        };
-
-        state.ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
-    }
-
-    function handleWebSocketMessage(message) {
-        console.log('Handling WebSocket message type:', message.type);
-
-        switch (message.type) {
-            case 'new_message':
-                console.log('New message notification:', message);
-                if (message.message) {
-                    handleNewMessage(message.message);
-                }
-                break;
-            case 'user_status':
-                console.log('User status update:', message);
-                if (message.userId && message.status) {
-                    handleUserStatus({
-                        userId: message.userId,
-                        status: message.status
-                    });
-                }
-                break;
-            case 'call_initiated':
-                console.log('Incoming call:', message);
-                if (message.call && message.callerName) {
-                    handleIncomingCall({
-                        call: message.call,
-                        callerName: message.callerName
-                    });
-                }
-                break;
-            case 'call_status':
-                console.log('Call status update:', message);
-                if (message.callId && message.status) {
-                    handleCallStatus({
-                        callId: message.callId,
-                        status: message.status
-                    });
-                }
-                break;
-            case 'webrtc_offer':
-            case 'webrtc_answer':
-            case 'ice_candidate':
-                console.log('WebRTC signal:', message.type);
-                handleWebRTCSignal(message);
-                break;
-            case 'pong':
-                // Keep-alive response
-                break;
-            default:
-                console.log('Unknown message type:', message.type);
-        }
-    }
-
-    function sendWebSocketMessage(type, data) {
-        if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-            const message = {
-                type: type,
-                data: JSON.stringify(data)
-            };
-            console.log('Sending WebSocket message:', message);
-            state.ws.send(JSON.stringify(message));
+        if (state.user) {
+            document.getElementById('userName').textContent = state.user.displayName;
+            document.getElementById('userAvatar').textContent = state.user.displayName[0].toUpperCase();
         }
     }
 
     // ==================== API FUNCTIONS ====================
     async function apiRequest(endpoint, options = {}) {
-        const headers = {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${state.token}`,
-            ...options.headers
-        };
-
-        try {
-            const response = await fetch(`${API_BASE}${endpoint}`, {
-                ...options,
-                headers
-            });
-
-            if (!response.ok && response.status !== 204) {
-                const error = await response.text();
-                throw new Error(`API error: ${response.status} - ${error}`);
+        const response = await fetch(`${API_BASE}${endpoint}`, {
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${state.token}`,
+                ...options.headers
             }
+        });
 
-            if (response.status === 204) return null;
-            return await response.json();
-        } catch (error) {
-            console.error(`API request failed for ${endpoint}:`, error);
-            showToast('Error', 'Request failed');
-            throw error;
+        if (response.status === 401) {
+            logout();
+            throw new Error('Unauthorized');
         }
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Request failed');
+        }
+
+        return response.json();
     }
 
-    // ==================== CONVERSATION FUNCTIONS ====================
+    async function fetchCurrentUser() {
+        state.user = await apiRequest('/users/me');
+    }
+
     async function loadConversations() {
         try {
             const dms = await apiRequest('/dms');
@@ -1033,113 +858,128 @@
         }
     }
 
-    function renderConversationList() {
-        const list = document.getElementById('conversationList');
+    // ==================== WEBSOCKET ====================
+    async function connectWebSocket() {
+        return new Promise((resolve, reject) => {
+            state.ws = new WebSocket(`${WS_BASE}/ws?token=${state.token}`);
 
-        if (state.conversations.length === 0) {
-            list.innerHTML = '<div style="padding: 20px; text-align: center; color: #95a5a6;">No conversations yet</div>';
-            return;
+            state.ws.onopen = () => {
+                console.log('WebSocket connected');
+                // Start ping interval
+                setInterval(() => {
+                    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                        state.ws.send(JSON.stringify({ type: 'ping' }));
+                    }
+                }, 30000);
+                resolve();
+            };
+
+            state.ws.onmessage = (event) => {
+                handleWebSocketMessage(event.data);
+            };
+
+            state.ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                reject(error);
+            };
+
+            state.ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                setTimeout(() => {
+                    if (state.token) {
+                        connectWebSocket();
+                    }
+                }, 3000);
+            };
+        });
+    }
+
+    function handleWebSocketMessage(data) {
+        try {
+            const message = JSON.parse(data);
+            console.log('WebSocket message:', message.type);
+
+            switch (message.type) {
+                case 'pong':
+                    break;
+                case 'new_message':
+                    handleNewMessage(JSON.parse(message.data));
+                    break;
+                case 'user_status':
+                    handleUserStatus(JSON.parse(message.data));
+                    break;
+                case 'call_initiated':
+                    handleIncomingCall(JSON.parse(message.data));
+                    break;
+                case 'call_status':
+                    handleCallStatus(JSON.parse(message.data));
+                    break;
+                case 'webrtc_offer':
+                    handleWebRTCOffer(JSON.parse(message.data));
+                    break;
+                case 'webrtc_answer':
+                    handleWebRTCAnswer(JSON.parse(message.data));
+                    break;
+                case 'ice_candidate':
+                    handleIceCandidate(JSON.parse(message.data));
+                    break;
+                case 'call_ended':
+                    handleCallEnded(JSON.parse(message.data));
+                    break;
+                default:
+                    console.log('Unknown message type:', message.type);
+            }
+        } catch (error) {
+            console.error('Error handling WebSocket message:', error);
         }
+    }
 
-        list.innerHTML = state.conversations.map(conv => {
-            const isActive = state.currentConversation && state.currentConversation.id === conv.id;
-            const statusColor = conv.otherUser.status === 'ONLINE' ? '#27ae60' :
-                conv.otherUser.status === 'AWAY' ? '#f39c12' :
-                    conv.otherUser.status === 'IN_CALL' ? '#e74c3c' : '#95a5a6';
+    // ==================== UI RENDERING ====================
+    function renderConversationList() {
+        const container = document.getElementById('conversationList');
+        container.innerHTML = '';
 
-            // Get last message preview if available
-            let lastMessagePreview = 'No messages yet';
-            let lastMessageTime = '';
-
-            if (state.messages[conv.id] && state.messages[conv.id].length > 0) {
-                const lastMsg = state.messages[conv.id][state.messages[conv.id].length - 1];
-                lastMessagePreview = lastMsg.content.length > 30
-                    ? lastMsg.content.substring(0, 30) + '...'
-                    : lastMsg.content;
-                lastMessageTime = formatTime(lastMsg.createdAt);
-            } else if (conv._lastMessage) {
-                // Fallback to cached preview
-                lastMessagePreview = conv._lastMessage.length > 30
-                    ? conv._lastMessage.substring(0, 30) + '...'
-                    : conv._lastMessage;
-                lastMessageTime = conv._lastMessageTime ? formatTime(conv._lastMessageTime) : '';
+        state.conversations.forEach(conv => {
+            const item = document.createElement('div');
+            item.className = 'conversation-item';
+            if (state.currentConversation?.id === conv.id) {
+                item.classList.add('active');
             }
 
-            return `
-            <div class="conversation-item ${isActive ? 'active' : ''}"
-                 onclick="selectConversation('${conv.id}')">
+            const statusClass = conv.otherUser.status === 'ONLINE' ? 'online' : 'offline';
+
+            item.innerHTML = `
                 <div class="conversation-header">
-                    <span class="conversation-name">${conv.otherUser.displayName}</span>
-                    <span class="conversation-time">
-                        <span style="display: inline-flex; align-items: center; gap: 4px;">
-                            <span style="width: 6px; height: 6px; border-radius: 50%; background: ${statusColor};"></span>
-                            ${conv.otherUser.status}
-                        </span>
-                        ${lastMessageTime ? `<br><small>${lastMessageTime}</small>` : ''}
-                    </span>
+                    <div class="conversation-name">${escapeHtml(conv.otherUser.displayName)}</div>
+                    <div class="conversation-time"></div>
                 </div>
-                <div class="conversation-preview" title="${conv._lastMessage || 'No messages'}">
-                    ${lastMessagePreview}
+                <div class="conversation-preview">
+                    <span class="status-indicator ${statusClass}"></span>
+                    ${conv.otherUser.status}
                 </div>
-            </div>
-        `;
-        }).join('');
+            `;
+
+            item.onclick = () => selectConversation(conv);
+            container.appendChild(item);
+        });
     }
 
-    async function selectConversation(conversationId) {
-        const conversation = state.conversations.find(c => c.id === conversationId);
-        if (!conversation) return;
-
+    async function selectConversation(conversation) {
         state.currentConversation = conversation;
-
-        document.getElementById('emptyState').classList.add('hidden');
-        document.getElementById('chatView').classList.remove('hidden');
-
-        document.getElementById('chatHeaderName').textContent = conversation.otherUser.displayName;
-        document.getElementById('chatHeaderStatus').textContent = conversation.otherUser.status;
-
-        await loadMessages(conversationId);
         renderConversationList();
+
+        document.getElementById('chatHeader').style.display = 'flex';
+        document.getElementById('messageInputContainer').style.display = 'block';
+        document.getElementById('chatName').textContent = conversation.otherUser.displayName;
+        document.getElementById('chatStatus').textContent = conversation.otherUser.status;
+
+        await loadMessages(conversation.id);
     }
 
-    async function createConversation() {
-        const recipientId = document.getElementById('recipientUserId').value.trim();
-        if (!recipientId) return;
-
-        try {
-            const dm = await apiRequest('/dms', {
-                method: 'POST',
-                body: JSON.stringify({ recipientId })
-            });
-
-            state.conversations.push(dm);
-            closeModal();
-            selectConversation(dm.id);
-            renderConversationList();
-        } catch (error) {
-            console.error('Error creating conversation:', error);
-            showToast('Error', 'Failed to create conversation');
-        }
-    }
-
-    function showNewConversationModal() {
-        // Simple prompt for now
-        const recipientId = prompt('Enter User ID to start conversation:');
-        if (recipientId) {
-            document.getElementById('recipientUserId').value = recipientId;
-            createConversation();
-        }
-    }
-
-    function closeModal() {
-        document.getElementById('newConversationModal').classList.add('hidden');
-    }
-
-    // ==================== MESSAGE FUNCTIONS ====================
     async function loadMessages(conversationId) {
         try {
-            const response = await apiRequest(`/dms/${conversationId}/messages`);
-            state.messages[conversationId] = response.messages.reverse();
+            const data = await apiRequest(`/dms/${conversationId}/messages?limit=50&offset=0`);
+            state.messages.set(conversationId, data.messages || []);
             renderMessages();
         } catch (error) {
             console.error('Error loading messages:', error);
@@ -1147,34 +987,57 @@
     }
 
     function renderMessages() {
-        if (!state.currentConversation) return;
-
         const container = document.getElementById('messagesContainer');
-        const messages = state.messages[state.currentConversation.id] || [];
+        container.innerHTML = '';
 
-        container.innerHTML = messages.map(msg => {
-            const isSent = msg.senderId === state.user.id;
+        if (!state.currentConversation) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">💬</div>
+                    <div class="empty-state-text">Select a conversation to start chatting</div>
+                </div>
+            `;
+            return;
+        }
 
-            return `
-                    <div class="message ${isSent ? 'sent' : ''}">
-                        <div class="message-avatar">${msg.senderName[0].toUpperCase()}</div>
-                        <div class="message-content">
-                            ${!isSent ? `<div class="message-sender">${msg.senderName}</div>` : ''}
-                            <div class="message-bubble">${escapeHtml(msg.content)}</div>
-                            <div class="message-time">${formatTime(msg.createdAt)}</div>
-                        </div>
-                    </div>
-                `;
-        }).join('');
+        const messages = state.messages.get(state.currentConversation.id) || [];
+
+        messages.forEach(msg => {
+            const messageEl = createMessageElement(msg);
+            container.appendChild(messageEl);
+        });
 
         container.scrollTop = container.scrollHeight;
     }
 
+    function createMessageElement(msg) {
+        const isSent = msg.senderId === state.user.id;
+        const div = document.createElement('div');
+        div.className = `message ${isSent ? 'sent' : ''}`;
+
+        const initial = msg.senderName[0].toUpperCase();
+
+        div.innerHTML = `
+            <div class="message-avatar">${initial}</div>
+            <div class="message-content">
+                <div class="message-header">
+                    <span class="message-sender">${escapeHtml(msg.senderName)}</span>
+                    <span class="message-time">${formatTime(msg.createdAt)}</span>
+                </div>
+                <div class="message-bubble">${escapeHtml(msg.content)}</div>
+            </div>
+        `;
+
+        return div;
+    }
+
+    // ==================== MESSAGE FUNCTIONS ====================
     async function sendMessage() {
         if (!state.currentConversation) return;
 
         const input = document.getElementById('messageInput');
         const content = input.value.trim();
+
         if (!content) return;
 
         try {
@@ -1184,207 +1047,55 @@
             });
 
             input.value = '';
-            input.style.height = 'auto';
         } catch (error) {
             console.error('Error sending message:', error);
+            showToast('Error', 'Failed to send message');
         }
     }
 
-    function handleMessageKeydown(event) {
-        if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
+    function handleMessageKeyPress(event) {
+        if (event.key === 'Enter') {
             sendMessage();
         }
     }
 
-    function handleNewMessage(message) {
-        console.log('New message received:', message);
+    function handleNewMessage(data) {
+        const message = data.message;
 
-        const conversationId = message.dmId || message.groupId;
-        if (!conversationId) return;
+        if (message.dmId) {
+            const messages = state.messages.get(message.dmId) || [];
+            messages.push(message);
+            state.messages.set(message.dmId, messages);
 
-        // Initialize messages array for this conversation if needed
-        if (!state.messages[conversationId]) {
-            state.messages[conversationId] = [];
-        }
-
-        // Check if message already exists
-        const exists = state.messages[conversationId].some(m => m.id === message.id);
-        if (!exists) {
-            // Add message
-            state.messages[conversationId].push(message);
-
-            // Sort by timestamp (oldest first)
-            state.messages[conversationId].sort((a, b) =>
-                new Date(a.createdAt) - new Date(b.createdAt)
-            );
-
-            // If this is the current conversation, update UI
-            if (state.currentConversation && state.currentConversation.id === conversationId) {
+            if (state.currentConversation?.id === message.dmId) {
                 renderMessages();
             }
 
-            // Update conversation list to show latest message preview
-            updateConversationPreview(conversationId, message);
-
-            // Show notification if not current conversation
-            if (!state.currentConversation || state.currentConversation.id !== conversationId) {
-                const preview = message.content.length > 50
-                    ? message.content.substring(0, 50) + '...'
-                    : message.content;
-                showToast('New Message', `${message.senderName}: ${preview}`);
+            if (message.senderId !== state.user.id) {
+                showToast('New Message', `${message.senderName}: ${message.content}`);
             }
-        }
-    }
-
-    function updateConversationPreview(conversationId, latestMessage) {
-        // Find the conversation
-        const convIndex = state.conversations.findIndex(c => c.id === conversationId);
-        if (convIndex !== -1) {
-            // Update the conversation with latest message preview
-            const conv = state.conversations[convIndex];
-
-            // Create a copy to trigger re-render
-            state.conversations = [...state.conversations];
-            state.conversations[convIndex] = {
-                ...conv,
-                _lastMessage: latestMessage.content,
-                _lastMessageTime: latestMessage.createdAt
-            };
-
-            // Re-render conversation list
-            renderConversationList();
-        }
-    }
-
-    // ==================== USER FUNCTIONS ====================
-    async function fetchAllUsers() {
-        try {
-            const users = await apiRequest('/users/all');
-
-            // Update online users state
-            state.onlineUsers = {};
-            users.forEach(user => {
-                state.onlineUsers[user.id] = user;
-
-                // Update status in conversations
-                state.conversations.forEach(conv => {
-                    if (conv.otherUser.id === user.id) {
-                        conv.otherUser.status = user.status;
-                    }
-                });
-            });
-
-            renderConversationList();
-            renderOnlineUsers();
-        } catch (error) {
-            console.error('Error fetching users:', error);
-        }
-    }
-
-    function renderOnlineUsers() {
-        const container = document.getElementById('onlineUsersList');
-        const onlineUsers = Object.values(state.onlineUsers).filter(user =>
-            user.id !== state.user.id &&
-            (user.status === 'ONLINE' || user.status === 'AWAY' || user.status === 'IN_CALL')
-        );
-
-        if (onlineUsers.length === 0) {
-            container.innerHTML = '<div style="color: #95a5a6; font-size: 12px; text-align: center;">No other users online</div>';
-            return;
-        }
-
-        container.innerHTML = onlineUsers.map(user => {
-            const statusClass = user.status === 'ONLINE' ? '' :
-                user.status === 'AWAY' ? 'away' :
-                    user.status === 'IN_CALL' ? 'in-call' : '';
-
-            return `
-            <div class="online-user-item" onclick="startChatWithUser('${user.id}')">
-                <div class="online-user-avatar">${user.displayName[0].toUpperCase()}</div>
-                <div class="online-user-info">
-                    <div class="online-user-name">${user.displayName}</div>
-                    <div class="online-user-status">
-                        <span class="status-dot ${statusClass}"></span>
-                        ${user.status}
-                    </div>
-                </div>
-            </div>
-        `;
-        }).join('');
-    }
-
-    async function startChatWithUser(userId) {
-        try {
-            const dm = await apiRequest('/dms', {
-                method: 'POST',
-                body: JSON.stringify({ recipientId: userId })
-            });
-
-            // Add to conversations if not already there
-            const exists = state.conversations.some(c => c.id === dm.id);
-            if (!exists) {
-                state.conversations.push(dm);
-            }
-
-            selectConversation(dm.id);
-            renderConversationList();
-            renderOnlineUsers();
-        } catch (error) {
-            console.error('Error starting chat:', error);
-            showToast('Error', 'Failed to start chat');
         }
     }
 
     function handleUserStatus(data) {
-        console.log('Updating user status:', data);
-
-        // Update in onlineUsers state
-        if (state.onlineUsers[data.userId]) {
-            state.onlineUsers[data.userId].status = data.status;
-        }
-
-        // Update in conversations
+        console.log('User status update:', data);
         let needsUpdate = false;
-        state.conversations.forEach((conv, index) => {
-            if (conv.otherUser.id === data.userId && conv.otherUser.status !== data.status) {
-                // Create new array to trigger re-render
-                state.conversations = [...state.conversations];
-                state.conversations[index] = {
-                    ...conv,
-                    otherUser: {
-                        ...conv.otherUser,
-                        status: data.status
-                    }
-                };
-                needsUpdate = true;
-            }
-        });
 
-        // Update current chat header if needed
-        if (state.currentConversation &&
-            state.currentConversation.otherUser.id === data.userId &&
-            state.currentConversation.otherUser.status !== data.status) {
+        const convIndex = state.conversations.findIndex(
+            c => c.otherUser.id === data.userId
+        );
 
-            state.currentConversation.otherUser.status = data.status;
-            document.getElementById('chatHeaderStatus').textContent = data.status;
-
-            // Also update in conversations array
-            const convIndex = state.conversations.findIndex(c => c.id === state.currentConversation.id);
-            if (convIndex !== -1) {
-                state.conversations[convIndex].otherUser.status = data.status;
-            }
+        if (convIndex !== -1) {
+            state.conversations[convIndex].otherUser.status = data.status;
             needsUpdate = true;
         }
 
-        // Re-render if anything changed
         if (needsUpdate) {
             renderConversationList();
-            renderOnlineUsers();
         }
     }
 
-    // ==================== CALL FUNCTIONS (SIMPLIFIED) ====================
+    // ==================== CALL FUNCTIONS ====================
     async function startCall() {
         if (!state.currentConversation) {
             showToast('Error', 'Select a conversation first');
@@ -1399,17 +1110,205 @@
             });
 
             state.activeCall = call;
+            state.isInitiator = true;
             showCallUI('Calling...', state.currentConversation.otherUser.displayName);
+
+            // Get local media stream
+            await getLocalStream();
+
+            // Create peer connection and offer
+            await createPeerConnection();
+            const offer = await state.peerConnection.createOffer();
+            await state.peerConnection.setLocalDescription(offer);
+
+            // Send offer to recipient
+            sendWebRTCSignal('webrtc_offer', {
+                callId: call.id,
+                fromUserId: state.user.id,
+                toUserId: recipientId,
+                signal: JSON.stringify(offer)
+            });
+
             showToast('Call Started', 'Calling ' + state.currentConversation.otherUser.displayName);
         } catch (error) {
             console.error('Error starting call:', error);
-            showToast('Error', 'Failed to start call');
+            showToast('Error', 'Failed to start call: ' + error.message);
+            cleanupCall();
         }
     }
 
-    function handleIncomingCall(data) {
+    async function getLocalStream() {
+        try {
+            state.localStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                },
+                video: false
+            });
+
+            // Optionally attach to local audio element for monitoring
+            // document.getElementById('localAudio').srcObject = state.localStream;
+
+            console.log('Local stream acquired');
+        } catch (error) {
+            console.error('Error getting local stream:', error);
+            throw new Error('Could not access microphone');
+        }
+    }
+
+    async function createPeerConnection() {
+        state.peerConnection = new RTCPeerConnection(rtcConfig);
+
+        // Add local stream tracks to peer connection
+        if (state.localStream) {
+            state.localStream.getTracks().forEach(track => {
+                state.peerConnection.addTrack(track, state.localStream);
+            });
+        }
+
+        // Handle incoming remote stream
+        state.peerConnection.ontrack = (event) => {
+            console.log('Received remote track');
+            const remoteAudio = document.getElementById('remoteAudio');
+            if (remoteAudio.srcObject !== event.streams[0]) {
+                remoteAudio.srcObject = event.streams[0];
+                console.log('Remote stream attached');
+            }
+        };
+
+        // Handle ICE candidates
+        state.peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                console.log('Sending ICE candidate');
+                const recipientId = state.activeCall.recipientId || 
+                    state.activeCall.participants.find(p => p.userId !== state.user.id)?.userId;
+
+                if (recipientId) {
+                    sendWebRTCSignal('ice_candidate', {
+                        callId: state.activeCall.id,
+                        fromUserId: state.user.id,
+                        toUserId: recipientId,
+                        signal: JSON.stringify(event.candidate)
+                    });
+                }
+            }
+        };
+
+        // Handle connection state changes
+        state.peerConnection.onconnectionstatechange = () => {
+            console.log('Connection state:', state.peerConnection.connectionState);
+            if (state.peerConnection.connectionState === 'connected') {
+                showToast('Call Connected', 'Voice call is now active');
+            } else if (state.peerConnection.connectionState === 'failed') {
+                showToast('Call Failed', 'Connection failed');
+                endCall();
+            }
+        };
+
+        console.log('Peer connection created');
+    }
+
+    function sendWebRTCSignal(type, data) {
+        if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+            const message = {
+                type: type,
+                data: JSON.stringify(data)
+            };
+            console.log('Sending WebRTC signal:', type);
+            state.ws.send(JSON.stringify(message));
+        }
+    }
+
+    async function handleIncomingCall(data) {
+        console.log('Incoming call:', data);
         state.activeCall = data.call;
+        state.isInitiator = false;
         showCallUI('Incoming Call', data.callerName, true);
+        showToast('Incoming Call', data.callerName + ' is calling you');
+    }
+
+    async function handleWebRTCOffer(data) {
+        console.log('Received WebRTC offer');
+        try {
+            // Get local stream if we don't have it yet
+            if (!state.localStream) {
+                await getLocalStream();
+            }
+
+            // Create peer connection if we don't have one
+            if (!state.peerConnection) {
+                await createPeerConnection();
+            }
+
+            // Set remote description (the offer)
+            const offer = JSON.parse(data.signal);
+            await state.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+            console.log('Remote description set (offer)');
+
+            // Process any pending ICE candidates
+            for (const candidate of state.pendingIceCandidates) {
+                await state.peerConnection.addIceCandidate(candidate);
+            }
+            state.pendingIceCandidates = [];
+
+            // Create and send answer
+            const answer = await state.peerConnection.createAnswer();
+            await state.peerConnection.setLocalDescription(answer);
+
+            sendWebRTCSignal('webrtc_answer', {
+                callId: data.callId,
+                fromUserId: state.user.id,
+                toUserId: data.fromUserId,
+                signal: JSON.stringify(answer)
+            });
+
+            console.log('Answer sent');
+        } catch (error) {
+            console.error('Error handling WebRTC offer:', error);
+            showToast('Error', 'Failed to handle call: ' + error.message);
+        }
+    }
+
+    async function handleWebRTCAnswer(data) {
+        console.log('Received WebRTC answer');
+        try {
+            if (!state.peerConnection) {
+                console.error('No peer connection exists');
+                return;
+            }
+
+            const answer = JSON.parse(data.signal);
+            await state.peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+            console.log('Remote description set (answer)');
+
+            // Process any pending ICE candidates
+            for (const candidate of state.pendingIceCandidates) {
+                await state.peerConnection.addIceCandidate(candidate);
+            }
+            state.pendingIceCandidates = [];
+        } catch (error) {
+            console.error('Error handling WebRTC answer:', error);
+        }
+    }
+
+    async function handleIceCandidate(data) {
+        console.log('Received ICE candidate');
+        try {
+            const candidate = JSON.parse(data.signal);
+
+            if (state.peerConnection && state.peerConnection.remoteDescription) {
+                await state.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                console.log('ICE candidate added');
+            } else {
+                // Queue candidates if remote description not set yet
+                console.log('Queuing ICE candidate');
+                state.pendingIceCandidates.push(new RTCIceCandidate(candidate));
+            }
+        } catch (error) {
+            console.error('Error handling ICE candidate:', error);
+        }
     }
 
     function handleCallStatus(data) {
@@ -1422,7 +1321,16 @@
         } else if (data.status === 'ENDED') {
             hideCallUI();
             showToast('Call Ended', 'The call has ended');
-            state.activeCall = null;
+            cleanupCall();
+        }
+    }
+
+    function handleCallEnded(data) {
+        console.log('Call ended notification');
+        if (state.activeCall) {
+            hideCallUI();
+            showToast('Call Ended', 'The call has ended');
+            cleanupCall();
         }
     }
 
@@ -1434,12 +1342,14 @@
                 method: 'POST'
             });
 
-            showCallUI('In Call', getCallParticipantName());
-            startCallTimer();
-            showToast('Call Accepted', 'You are now in the call');
+            showCallUI('Connecting...', getCallParticipantName());
+            showToast('Call Accepted', 'Connecting...');
+
+            // Media stream should already be acquired when handling the offer
         } catch (error) {
             console.error('Error accepting call:', error);
             showToast('Error', 'Failed to accept call');
+            cleanupCall();
         }
     }
 
@@ -1452,9 +1362,10 @@
             });
 
             hideCallUI();
-            state.activeCall = null;
+            cleanupCall();
         } catch (error) {
             console.error('Error rejecting call:', error);
+            cleanupCall();
         }
     }
 
@@ -1462,16 +1373,90 @@
         if (!state.activeCall) return;
 
         try {
+            // Notify backend
             await apiRequest(`/calls/${state.activeCall.id}/end`, {
                 method: 'POST'
             });
 
+            // Notify peer via WebSocket
+            const recipientId = state.activeCall.recipientId || 
+                state.activeCall.participants.find(p => p.userId !== state.user.id)?.userId;
+
+            if (recipientId) {
+                sendWebRTCSignal('call_ended', {
+                    callId: state.activeCall.id,
+                    fromUserId: state.user.id,
+                    toUserId: recipientId,
+                    ended: true
+                });
+            }
+
             hideCallUI();
-            state.activeCall = null;
             showToast('Call Ended', 'Call ended');
         } catch (error) {
             console.error('Error ending call:', error);
+        } finally {
+            cleanupCall();
         }
+    }
+
+    function toggleMute() {
+        if (!state.localStream) return;
+
+        state.isMuted = !state.isMuted;
+        state.localStream.getAudioTracks().forEach(track => {
+            track.enabled = !state.isMuted;
+        });
+
+        // Update button UI
+        const muteBtn = document.querySelector('.call-btn.mute');
+        if (muteBtn) {
+            if (state.isMuted) {
+                muteBtn.classList.add('muted');
+                muteBtn.innerHTML = '🔇';
+            } else {
+                muteBtn.classList.remove('muted');
+                muteBtn.innerHTML = '🔊';
+            }
+        }
+
+        // Notify server
+        if (state.activeCall) {
+            sendWebRTCSignal('mute_toggle', {
+                callId: state.activeCall.id,
+                isMuted: state.isMuted
+            });
+        }
+
+        showToast(state.isMuted ? 'Muted' : 'Unmuted', 
+            state.isMuted ? 'Your microphone is muted' : 'Your microphone is active');
+    }
+
+    function cleanupCall() {
+        // Close peer connection
+        if (state.peerConnection) {
+            state.peerConnection.close();
+            state.peerConnection = null;
+        }
+
+        // Stop local stream
+        if (state.localStream) {
+            state.localStream.getTracks().forEach(track => track.stop());
+            state.localStream = null;
+        }
+
+        // Clear remote audio
+        const remoteAudio = document.getElementById('remoteAudio');
+        if (remoteAudio.srcObject) {
+            remoteAudio.srcObject.getTracks().forEach(track => track.stop());
+            remoteAudio.srcObject = null;
+        }
+
+        // Reset state
+        state.activeCall = null;
+        state.isInitiator = false;
+        state.isMuted = false;
+        state.pendingIceCandidates = [];
     }
 
     function showCallUI(status, participant, isIncoming = false) {
@@ -1486,13 +1471,14 @@
 
         if (isIncoming) {
             controlsEl.innerHTML = `
-                    <button class="call-btn accept" onclick="acceptCall()" title="Accept">✓</button>
-                    <button class="call-btn reject" onclick="rejectCall()" title="Reject">✗</button>
-                `;
+                <button class="call-btn accept" onclick="acceptCall()" title="Accept">✓</button>
+                <button class="call-btn reject" onclick="rejectCall()" title="Reject">✗</button>
+            `;
         } else {
             controlsEl.innerHTML = `
-                    <button class="call-btn end" onclick="endCall()" title="End Call">✗</button>
-                `;
+                <button class="call-btn mute" onclick="toggleMute()" title="Mute">🔊</button>
+                <button class="call-btn end" onclick="endCall()" title="End Call">✗</button>
+            `;
         }
     }
 
@@ -1520,14 +1506,10 @@
 
     function getCallParticipantName() {
         if (!state.activeCall) return '';
-        return state.currentConversation?.otherUser.displayName || 'Unknown';
-    }
-
-    // ==================== WEBRTC SIGNAL HANDLING (SIMPLIFIED) ====================
-    function handleWebRTCSignal(message) {
-        console.log('WebRTC signal received:', message.type);
-        // For now, just log WebRTC signals
-        // In a real implementation, this would handle SDP and ICE candidates
+        if (state.currentConversation) {
+            return state.currentConversation.otherUser.displayName;
+        }
+        return 'Unknown';
     }
 
     // ==================== UTILITY FUNCTIONS ====================
@@ -1558,9 +1540,9 @@
         const toast = document.createElement('div');
         toast.className = 'toast';
         toast.innerHTML = `
-                <div class="toast-title">${title}</div>
-                <div class="toast-body">${escapeHtml(message)}</div>
-            `;
+            <div class="toast-title">${title}</div>
+            <div class="toast-body">${escapeHtml(message)}</div>
+        `;
 
         document.body.appendChild(toast);
 
@@ -1573,84 +1555,8 @@
         return toast;
     }
 
-    // ==================== MODAL STYLES (Inline for simplicity) ====================
-    const style = document.createElement('style');
-    style.textContent = `
-            .modal {
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(0, 0, 0, 0.5);
-                z-index: 1000;
-                align-items: center;
-                justify-content: center;
-            }
-
-            .modal-content {
-                background: white;
-                border-radius: 12px;
-                padding: 24px;
-                width: 90%;
-                max-width: 400px;
-            }
-
-            .modal-header {
-                font-size: 20px;
-                font-weight: 600;
-                margin-bottom: 20px;
-                color: #2c3e50;
-            }
-
-            .modal-input {
-                width: 100%;
-                padding: 12px;
-                margin-bottom: 16px;
-                border: 2px solid #e0e0e0;
-                border-radius: 8px;
-                font-size: 14px;
-            }
-
-            .modal-input:focus {
-                outline: none;
-                border-color: #667eea;
-            }
-
-            .modal-actions {
-                display: flex;
-                gap: 12px;
-                justify-content: flex-end;
-            }
-
-            .modal-btn {
-                padding: 10px 20px;
-                border: none;
-                border-radius: 6px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: background 0.3s;
-            }
-
-            .modal-btn.primary {
-                background: #667eea;
-                color: white;
-            }
-
-            .modal-btn.primary:hover {
-                background: #5568d3;
-            }
-
-            .modal-btn.secondary {
-                background: #e0e0e0;
-                color: #2c3e50;
-            }
-
-            .modal-btn.secondary:hover {
-                background: #d0d0d0;
-            }
-        `;
-    document.head.appendChild(style);
+    // ==================== START APPLICATION ====================
+    init();
 </script>
 </body>
 </html>
